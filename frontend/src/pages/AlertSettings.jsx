@@ -35,7 +35,16 @@ const AlertSettings = () => {
   const handleAdd = () => {
     setEditingConfig(null);
     form.resetFields();
-    form.setFieldsValue({ is_active: true, threshold: 100, project_ids: [], time_range_days: 1, service_description: '' });
+    form.setFieldsValue({ 
+      is_active: true, 
+      threshold: 100, 
+      project_ids: [], 
+      time_range_days: 1, 
+      service_description: '',
+      alert_type: 'absolute',
+      comparison_window: 'week',
+      threshold_percentage: 50
+    });
     setIsModalVisible(true);
   };
 
@@ -43,7 +52,8 @@ const AlertSettings = () => {
     setEditingConfig(record);
     form.setFieldsValue({
       ...record,
-      project_ids: record.project_ids || []
+      project_ids: record.project_ids || [],
+      threshold_percentage: record.threshold_percentage ? record.threshold_percentage * 100 : 50
     });
     setIsModalVisible(true);
   };
@@ -64,7 +74,10 @@ const AlertSettings = () => {
       // If project_ids is empty array, send null to indicate "All Projects"
       const payload = {
         ...values,
-        project_ids: values.project_ids && values.project_ids.length > 0 ? values.project_ids : null
+        project_ids: values.project_ids && values.project_ids.length > 0 ? values.project_ids : null,
+        threshold_percentage: values.alert_type === 'relative' && values.threshold_percentage ? values.threshold_percentage / 100 : null,
+        comparison_window: values.alert_type === 'relative' ? values.comparison_window : null,
+        threshold: values.alert_type === 'absolute' ? values.threshold : 0
       };
 
       if (editingConfig) {
@@ -162,16 +175,28 @@ const AlertSettings = () => {
       render: (val) => val ? <Tag color="purple">{val}</Tag> : <Tag>All Services</Tag>,
     },
     {
+      title: 'Alert Type',
+      dataIndex: 'alert_type',
+      key: 'alert_type',
+      render: (val) => val === 'relative' ? <Tag color="orange">Relative (环比)</Tag> : <Tag color="cyan">Absolute (绝对值)</Tag>,
+    },
+    {
       title: 'Time Range',
       dataIndex: 'time_range_days',
       key: 'time_range_days',
       render: (val) => `${val} Day(s)`,
     },
     {
-      title: 'Threshold (USD)',
-      dataIndex: 'threshold',
-      key: 'threshold',
-      render: (val) => `$${val}`,
+      title: 'Threshold',
+      key: 'threshold_display',
+      render: (_, record) => {
+        if (record.alert_type === 'relative') {
+          const windowText = record.comparison_window === 'week' ? 'Last Week' : 'Last Month';
+          const pct = record.threshold_percentage ? (record.threshold_percentage * 100).toFixed(0) : 0;
+          return <Text type="warning">+{pct}% vs {windowText}</Text>;
+        }
+        return <Text>${record.threshold} USD</Text>;
+      }
     },
     {
       title: 'Email',
@@ -299,11 +324,58 @@ const AlertSettings = () => {
           </Form.Item>
           
           <Form.Item
-            name="threshold"
-            label="Cost Threshold per Project (USD)"
-            rules={[{ required: true, message: 'Please enter threshold' }]}
+            name="alert_type"
+            label="Alert Type"
+            rules={[{ required: true, message: 'Please select alert type' }]}
           >
-            <InputNumber min={0} step={10} style={{ width: '100%' }} />
+            <Select>
+              <Option value="absolute">Absolute Threshold (绝对值告警)</Option>
+              <Option value="relative">Relative Growth (环比告警)</Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => prevValues.alert_type !== currentValues.alert_type}
+          >
+            {({ getFieldValue }) => 
+              getFieldValue('alert_type') === 'absolute' ? (
+                <Form.Item
+                  name="threshold"
+                  label="Cost Threshold per Project (USD)"
+                  rules={[{ required: true, message: 'Please enter threshold' }]}
+                >
+                  <InputNumber min={0} step={10} style={{ width: '100%' }} />
+                </Form.Item>
+              ) : (
+                <>
+                  <Form.Item
+                    name="comparison_window"
+                    label="Comparison Window"
+                    rules={[{ required: true, message: 'Please select comparison window' }]}
+                  >
+                    <Select>
+                      <Option value="week">vs Same Day Last Week (同比上周)</Option>
+                      <Option value="month">vs Same Day Last Month (同比上月)</Option>
+                    </Select>
+                  </Form.Item>
+                  <Form.Item
+                    name="threshold_percentage"
+                    label="Growth Threshold (%)"
+                    rules={[{ required: true, message: 'Please enter growth threshold percentage' }]}
+                  >
+                    <InputNumber 
+                      min={0} 
+                      step={5} 
+                      formatter={value => `${value}%`}
+                      parser={value => value.replace('%', '')}
+                      style={{ width: '100%' }} 
+                      placeholder="e.g. 50 for 50% growth"
+                    />
+                  </Form.Item>
+                </>
+              )
+            }
           </Form.Item>
           
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '8px', marginBottom: 24 }}>

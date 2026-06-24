@@ -100,12 +100,17 @@ const AlertIncidents = () => {
     {
       title: 'Cost / Threshold',
       key: 'cost_threshold',
-      render: (_, record) => (
-        <Space>
-          <Text type="danger">${record.cost.toFixed(2)}</Text>
-          <Text type="secondary">/ ${record.threshold.toFixed(2)}</Text>
-        </Space>
-      ),
+      render: (_, record) => {
+        const isRelative = record.config?.alert_type === 'relative';
+        return (
+          <Space>
+            <Text type="danger">${record.cost.toFixed(2)}</Text>
+            <Text type="secondary">
+              / {isRelative ? `+${(record.threshold * 100).toFixed(0)}%` : `$${record.threshold.toFixed(2)}`}
+            </Text>
+          </Space>
+        );
+      },
     },
     {
       title: 'Status',
