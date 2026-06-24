@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16
+    container_name: billing_alert_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Baidao123..
+      POSTGRES_DB: Billing
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: billing_alert_backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=Billing
+      - DB_USER=postgres
+      - DB_PASS=Baidao123..
+      # If you have GOOGLE_APPLICATION_CREDENTIALS, you can mount it and set it here
+      # - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+    depends_on:
+      - db
+    volumes:
+      # Mount credentials if needed
+      - ./backend/credentials.json:/app/credentials.json:ro
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: billing_alert_frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+    name: billing_alert_postgres_data
