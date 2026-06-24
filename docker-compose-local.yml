@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: billing_alert_backend_local
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=34.81.147.109
+      - DB_PORT=15432
+      - DB_NAME=Billing
+      - DB_USER=postgres
+      - DB_PASS=Baidao123..
+    volumes:
+      - ./backend/credentials.json:/app/credentials.json:ro
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: billing_alert_frontend_local
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

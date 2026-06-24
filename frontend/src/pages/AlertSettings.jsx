@@ -50,10 +50,18 @@ const AlertSettings = () => {
 
   const handleEdit = (record) => {
     setEditingConfig(record);
+    let compWindow = record.comparison_window;
+    let customDays = null;
+    if (record.alert_type === 'relative' && compWindow !== 'week' && compWindow !== 'month') {
+      customDays = parseInt(compWindow) || 3;
+      compWindow = 'custom';
+    }
     form.setFieldsValue({
       ...record,
       project_ids: record.project_ids || [],
-      threshold_percentage: record.threshold_percentage ? record.threshold_percentage * 100 : 50
+      threshold_percentage: record.threshold_percentage ? record.threshold_percentage * 100 : 50,
+      comparison_window: compWindow,
+      custom_comparison_days: customDays
     });
     setIsModalVisible(true);
   };
@@ -72,11 +80,15 @@ const AlertSettings = () => {
     try {
       const values = await form.validateFields();
       // If project_ids is empty array, send null to indicate "All Projects"
+      let compWindow = values.comparison_window;
+      if (values.alert_type === 'relative' && compWindow === 'custom') {
+        compWindow = values.custom_comparison_days ? values.custom_comparison_days.toString() : '3';
+      }
       const payload = {
         ...values,
         project_ids: values.project_ids && values.project_ids.length > 0 ? values.project_ids : null,
         threshold_percentage: values.alert_type === 'relative' && values.threshold_percentage ? values.threshold_percentage / 100 : null,
-        comparison_window: values.alert_type === 'relative' ? values.comparison_window : null,
+        comparison_window: values.alert_type === 'relative' ? compWindow : null,
         threshold: values.alert_type === 'absolute' ? values.threshold : 0
       };
 
@@ -191,7 +203,14 @@ const AlertSettings = () => {
       key: 'threshold_display',
       render: (_, record) => {
         if (record.alert_type === 'relative') {
-          const windowText = record.comparison_window === 'week' ? 'Last Week' : 'Last Month';
+          let windowText = '';
+          if (record.comparison_window === 'week') {
+            windowText = 'Last Week (同比上周)';
+          } else if (record.comparison_window === 'month') {
+            windowText = 'Last Month (同比上月)';
+          } else {
+            windowText = `${record.comparison_window} Days Ago (前 ${record.comparison_window} 天)`;
+          }
           const pct = record.threshold_percentage ? (record.threshold_percentage * 100).toFixed(0) : 0;
           return <Text type="warning">+{pct}% vs {windowText}</Text>;
         }
@@ -357,8 +376,29 @@ const AlertSettings = () => {
                     <Select>
                       <Option value="week">vs Same Day Last Week (同比上周)</Option>
                       <Option value="month">vs Same Day Last Month (同比上月)</Option>
+                      <Option value="3">vs 3 Days Ago (环比前 3 天)</Option>
+                      <Option value="4">vs 4 Days Ago (环比前 4 天)</Option>
+                      <Option value="custom">Custom Days (自定义天数)</Option>
                     </Select>
                   </Form.Item>
+
+                  <Form.Item
+                    noStyle
+                    shouldUpdate={(prevValues, currentValues) => prevValues.comparison_window !== currentValues.comparison_window}
+                  >
+                    {({ getFieldValue }) => 
+                      getFieldValue('comparison_window') === 'custom' ? (
+                        <Form.Item
+                          name="custom_comparison_days"
+                          label="Custom Comparison Days"
+                          rules={[{ required: true, message: 'Please enter custom comparison days' }]}
+                        >
+                          <InputNumber min={1} max={365} style={{ width: '100%' }} placeholder="e.g. 5 for 5 days ago" />
+                        </Form.Item>
+                      ) : null
+                    }
+                  </Form.Item>
+
                   <Form.Item
                     name="threshold_percentage"
                     label="Growth Threshold (%)"

@@ -20,6 +20,27 @@ from google.auth.transport.requests import Request
 
 logger = logging.getLogger(__name__)
 
+def get_comparison_days(window: str) -> int:
+    if window == "week":
+        return 7
+    elif window == "month":
+        return 30
+    try:
+        return int(window)
+    except (ValueError, TypeError):
+        return 7 # default fallback
+
+def get_window_display_name(window: str) -> str:
+    if window == "week":
+        return "同比上周"
+    elif window == "month":
+        return "同比上月"
+    try:
+        days = int(window)
+        return f"环比前 {days} 天"
+    except (ValueError, TypeError):
+        return "环比"
+
 def get_access_token():
     """获取 Google Cloud API 的 Access Token"""
     scopes = ["https://www.googleapis.com/auth/cloud-billing.readonly"]
@@ -153,10 +174,8 @@ def check_billing_and_alert():
             # Determine query start date based on alert type
             query_start_dt = start_dt
             if config.alert_type == "relative":
-                if config.comparison_window == "week":
-                    query_start_dt = start_dt - timedelta(days=7)
-                elif config.comparison_window == "month":
-                    query_start_dt = start_dt - timedelta(days=30)
+                comp_days = get_comparison_days(config.comparison_window)
+                query_start_dt = start_dt - timedelta(days=comp_days)
             
             # Fetch usages with optional service_description filter
             usages = crud.get_daily_usage(db, query_start_dt, end_dt, service_description=config.service_description)
@@ -188,12 +207,8 @@ def check_billing_and_alert():
                     
                     if config.alert_type == "relative":
                         # Calculate history date
-                        if config.comparison_window == "week":
-                            history_date = current_date - timedelta(days=7)
-                        elif config.comparison_window == "month":
-                            history_date = current_date - timedelta(days=30)
-                        else:
-                            history_date = None
+                        comp_days = get_comparison_days(config.comparison_window)
+                        history_date = current_date - timedelta(days=comp_days)
                             
                         if history_date:
                             history_date_str = history_date.strftime('%Y-%m-%d')
@@ -271,7 +286,7 @@ def check_billing_and_alert():
                 service_info = f" (服务: {config.service_description})" if config.service_description else ""
                 
                 if config.alert_type == "relative":
-                    window_name = "同比上周" if config.comparison_window == "week" else "同比上月"
+                    window_name = get_window_display_name(config.comparison_window)
                     project_details = []
                     for p in exceeded_projects:
                         ratio_pct = p['change_ratio'] * 100
