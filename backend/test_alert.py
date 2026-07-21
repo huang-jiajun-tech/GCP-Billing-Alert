@@ -259,5 +259,47 @@ class TestAlertSchedulerLogic(unittest.TestCase):
         mock_send_webhook.assert_not_called()
         mock_crud.create_alert_incident.assert_not_called()
 
+    @patch('scheduler.SessionLocal')
+    @patch('scheduler.crud')
+    @patch('scheduler.send_webhook_alert')
+    def test_billing_dimension_alert_trigger(self, mock_send_webhook, mock_crud, mock_session_local):
+        mock_db = MagicMock()
+        mock_session_local.return_value = mock_db
+        
+        # Mock billing accounts display names
+        billing_acc1 = MagicMock(billing_account_id="billing-1", display_name="Test Account 1")
+        mock_crud.get_billing_accounts.return_value = [billing_acc1]
+        
+        # Mock project info for customer names
+        proj_info1 = MagicMock(project_id="proj-1", customer_name="Customer A")
+        mock_crud.get_all_project_infos.return_value = [proj_info1]
+
+        config = models.AlertConfig(
+            id=2,
+            alert_name="Billing Absolute Alert",
+            alert_type="absolute",
+            threshold=100.0,
+            time_range_days=1,
+            is_active=True,
+            dimension="billing",
+            webhook_url="http://mock-webhook"
+        )
+        mock_crud.get_alert_configs.return_value = [config]
+        
+        yesterday = (datetime.utcnow() - timedelta(days=1)).date()
+        
+        # Specify type of billing_account_id as string so our scheduler accepts it
+        usage_current_1 = MagicMock(project_id="proj-1", billing_account_id="billing-1", cost=150.0, usage_date=yesterday)
+        
+        mock_crud.get_daily_usage.return_value = [usage_current_1]
+        mock_db.query().filter().first.return_value = None
+        
+        check_billing_and_alert()
+        
+        # Verify webhook was called
+        mock_send_webhook.assert_called_once()
+        # Verify incident was created
+        mock_crud.create_alert_incident.assert_called_once()
+
 if __name__ == '__main__':
     unittest.main()

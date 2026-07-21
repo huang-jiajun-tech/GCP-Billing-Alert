@@ -147,13 +147,16 @@ def send_email_alert(email: str, message_content: str, threshold: float, date: s
     logger.info(f"Mock Email sent to {email}: {message_content} on {date} (Threshold: {threshold_display})")
 
 def check_billing_and_alert():
-    """
-    Job to check billing and trigger alerts
-    """
     logger.info("Running billing check job...")
     db = SessionLocal()
     try:
-        # Get all active alert configs
+        # 获取基础数据字典用于补全通知信息
+        billing_accounts = crud.get_billing_accounts(db, limit=5000)
+        billing_name_map = {acc.billing_account_id: acc.display_name for acc in billing_accounts}
+        
+        project_infos = crud.get_all_project_infos(db)
+        project_customer_map = {pi.project_id: pi.customer_name for pi in project_infos}
+
         configs = crud.get_alert_configs(db)
         active_configs = [c for c in configs if c.is_active]
         
@@ -161,60 +164,61 @@ def check_billing_and_alert():
             logger.info("No active alert configurations found.")
             return
             
-        from datetime import datetime as dt
-        
         for config in active_configs:
             days_to_check = config.time_range_days or 1
-            
-            # Calculate date range for this config
-            # Billing data usually has 1 day delay, so end_date is yesterday
             end_dt = (datetime.utcnow() - timedelta(days=1)).date()
             start_dt = (datetime.utcnow() - timedelta(days=days_to_check)).date()
             
-            # Determine query start date based on alert type
             query_start_dt = start_dt
             if config.alert_type == "relative":
                 comp_days = get_comparison_days(config.comparison_window)
                 query_start_dt = start_dt - timedelta(days=comp_days)
             
-            # Fetch usages with optional service_description filter
+            # 1. 抓取该时段的每日花费记录
             usages = crud.get_daily_usage(db, query_start_dt, end_dt, service_description=config.service_description)
             
-            # Aggregate by project AND date to check daily threshold
-            # Structure: { project_id: { date_str: daily_cost } }
-            project_daily_costs = {}
-            for u in usages:
-                pid = u.project_id
-                date_str = u.usage_date.strftime('%Y-%m-%d')
-                if pid not in project_daily_costs:
-                    project_daily_costs[pid] = {}
-                project_daily_costs[pid][date_str] = project_daily_costs[pid].get(date_str, 0) + u.cost
-                
-            # Determine which projects to check for this config
-            projects_to_check = config.project_ids if config.project_ids else list(project_daily_costs.keys())
-            
-            exceeded_projects = []
-            for pid in projects_to_check:
-                daily_costs = project_daily_costs.get(pid, {})
-                
-                exceeding_days = []
-                
-                # Check each day in the current check range
-                current_date = start_dt
-                while current_date <= end_dt:
-                    date_str = current_date.strftime('%Y-%m-%d')
-                    cost = daily_costs.get(date_str, 0.0)
+            if config.dimension == "billing":
+                # ==========================================
+                # Billing 维度告警判定
+                # ==========================================
+                billing_daily_costs = {}
+                billing_project_costs = {} # 记录项目占比用
+
+                for u in usages:
+                    bid = u.billing_account_id
+                    if not bid:
+                        continue
+                    date_str = u.usage_date.strftime('%Y-%m-%d')
                     
-                    if config.alert_type == "relative":
-                        # Calculate history date
-                        comp_days = get_comparison_days(config.comparison_window)
-                        history_date = current_date - timedelta(days=comp_days)
-                            
-                        if history_date:
+                    if bid not in billing_daily_costs:
+                        billing_daily_costs[bid] = {}
+                    billing_daily_costs[bid][date_str] = billing_daily_costs[bid].get(date_str, 0.0) + u.cost
+
+                    # 记录同一 Billing 下项目的花费
+                    if bid not in billing_project_costs:
+                        billing_project_costs[bid] = {}
+                    if date_str not in billing_project_costs[bid]:
+                        billing_project_costs[bid][date_str] = {}
+                    billing_project_costs[bid][date_str][u.project_id] = billing_project_costs[bid][date_str].get(u.project_id, 0.0) + u.cost
+
+                billings_to_check = config.billing_account_ids if config.billing_account_ids else list(billing_daily_costs.keys())
+                exceeded_billings = []
+
+                for bid in billings_to_check:
+                    daily_costs = billing_daily_costs.get(bid, {})
+                    exceeding_days = []
+                    current_date = start_dt
+                    
+                    while current_date <= end_dt:
+                        date_str = current_date.strftime('%Y-%m-%d')
+                        cost = daily_costs.get(date_str, 0.0)
+                        
+                        if config.alert_type == "relative":
+                            comp_days = get_comparison_days(config.comparison_window)
+                            history_date = current_date - timedelta(days=comp_days)
                             history_date_str = history_date.strftime('%Y-%m-%d')
                             history_cost = daily_costs.get(history_date_str, 0.0)
                             
-                            # Handle missing or zero history data to avoid division by zero or false alerts
                             if history_cost > 0:
                                 change_ratio = (cost - history_cost) / history_cost
                                 if change_ratio > config.threshold_percentage:
@@ -225,109 +229,248 @@ def check_billing_and_alert():
                                         "history_cost": history_cost,
                                         "change_ratio": change_ratio
                                     })
-                    else:
-                        # Absolute threshold check
-                        if cost > config.threshold:
-                            exceeding_days.append({
-                                "date": date_str,
-                                "cost": cost
+                        else:
+                            if cost > config.threshold:
+                                exceeding_days.append({
+                                    "date": date_str,
+                                    "cost": cost
+                                })
+                        current_date += timedelta(days=1)
+
+                    if exceeding_days:
+                        # 抑制 24 小时内的重复未处理 pending 告警
+                        import models
+                        recent_pending = db.query(models.AlertIncident).filter(
+                            models.AlertIncident.billing_account_id == bid,
+                            models.AlertIncident.alert_config_id == config.id,
+                            models.AlertIncident.status == "pending",
+                            models.AlertIncident.created_at >= datetime.utcnow() - timedelta(hours=24)
+                        ).first()
+                        if recent_pending:
+                            continue
+
+                        exceeding_days.sort(key=lambda x: x['date'], reverse=True)
+                        latest_exceeding = exceeding_days[0]
+                        latest_date_str = latest_exceeding["date"]
+
+                        # 统计提取当日 Top 3 消费项目
+                        proj_costs = billing_project_costs.get(bid, {}).get(latest_date_str, {})
+                        sorted_projs = sorted(proj_costs.items(), key=lambda x: x[1], reverse=True)
+                        top_projects = []
+                        for pid, pcost in sorted_projs[:3]:
+                            top_projects.append({
+                                "project_id": pid,
+                                "cost": pcost,
+                                "percentage": (pcost / latest_exceeding["cost"] * 100) if latest_exceeding["cost"] > 0 else 0
                             })
-                            
-                    current_date += timedelta(days=1)
-                
-                if exceeding_days:
-                    # Check if there's a recently handled incident for this project to suppress alert
-                    recent_handled = crud.get_recent_handled_incidents(db, pid, days=3)
-                    if recent_handled:
-                        logger.info(f"Alert suppressed for project {pid} due to recent handling.")
-                        continue
-                        
-                    # Check if there's already a pending incident in the last 24 hours to avoid hourly spam
-                    import models
-                    recent_pending = db.query(models.AlertIncident).filter(
-                        models.AlertIncident.project_id == pid,
-                        models.AlertIncident.alert_config_id == config.id,
-                        models.AlertIncident.status == "pending",
-                        models.AlertIncident.created_at >= datetime.utcnow() - timedelta(hours=24)
-                    ).first()
-                    if recent_pending:
-                        continue
-                        
-                    # Sort exceeding days by date descending to show the latest one
-                    exceeding_days.sort(key=lambda x: x['date'], reverse=True)
-                    latest_exceeding = exceeding_days[0]
-                    
-                    exceeded_project_info = {
-                        "id": pid, 
-                        "cost": latest_exceeding["cost"],
-                        "date": latest_exceeding["date"]
-                    }
-                    if config.alert_type == "relative":
-                        exceeded_project_info.update({
-                            "history_date": latest_exceeding["history_date"],
-                            "history_cost": latest_exceeding["history_cost"],
-                            "change_ratio": latest_exceeding["change_ratio"]
-                        })
-                    exceeded_projects.append(exceeded_project_info)
-                    
-                    # Record the incident in DB
-                    incident_data = schemas.AlertIncidentCreate(
-                        alert_config_id=config.id,
-                        project_id=pid,
-                        cost=latest_exceeding["cost"],
-                        threshold=config.threshold_percentage if config.alert_type == "relative" else config.threshold,
-                        usage_date=latest_exceeding["date"]
-                    )
-                    crud.create_alert_incident(db, incident_data)
-                    
-            if exceeded_projects:
-                logger.warning(f"ALERT: Config '{config.alert_name}' triggered for {len(exceeded_projects)} projects.")
-                
-                service_info = f" (服务: {config.service_description})" if config.service_description else ""
-                
-                if config.alert_type == "relative":
-                    window_name = get_window_display_name(config.comparison_window)
-                    project_details = []
-                    for p in exceeded_projects:
-                        ratio_pct = p['change_ratio'] * 100
-                        detail = (
-                            f"> - {p['id']}: 当前费用 ${p['cost']:.2f} (日期: {p['date']}), "
-                            f"历史费用 ${p['history_cost']:.2f} (日期: {p['history_date']}), "
-                            f"涨幅: {ratio_pct:+.2f}%"
+
+                        exceeded_billing_info = {
+                            "id": bid,
+                            "cost": latest_exceeding["cost"],
+                            "date": latest_date_str,
+                            "top_projects": top_projects
+                        }
+                        if config.alert_type == "relative":
+                            exceeded_billing_info.update({
+                                "history_date": latest_exceeding["history_date"],
+                                "history_cost": latest_exceeding["history_cost"],
+                                "change_ratio": latest_exceeding["change_ratio"]
+                            })
+                        exceeded_billings.append(exceeded_billing_info)
+
+                        # 创建 Incident 记录
+                        incident_data = schemas.AlertIncidentCreate(
+                            alert_config_id=config.id,
+                            project_id=None,
+                            billing_account_id=bid,
+                            cost=latest_exceeding["cost"],
+                            threshold=config.threshold_percentage if config.alert_type == "relative" else config.threshold,
+                            usage_date=latest_date_str
                         )
-                        project_details.append(detail)
-                    project_details_str = "\n".join(project_details)
+                        crud.create_alert_incident(db, incident_data)
+
+                if exceeded_billings:
+                    logger.warning(f"ALERT: Billing Config '{config.alert_name}' triggered for {len(exceeded_billings)} accounts.")
+                    service_info = f" (服务: {config.service_description})" if config.service_description else ""
+                    threshold_val = config.threshold_percentage if config.alert_type == "relative" else config.threshold
+
+                    billing_details_list = []
+                    for b in exceeded_billings:
+                        bname = billing_name_map.get(b['id'], "未知账号")
+                        if config.alert_type == "relative":
+                            ratio_pct = b['change_ratio'] * 100
+                            detail_header = (
+                                f"> 🚨 **超标 Billing 账号**: `{b['id']} ({bname})`\n"
+                                f"> - **当前总费用**: <font color=\"warning\">${b['cost']:.2f}</font> (日期: {b['date']})\n"
+                                f"> - **历史同期费用**: ${b['history_cost']:.2f} (日期: {b['history_date']})\n"
+                                f"> - **整体涨幅**: <font color=\"warning\">{ratio_pct:+.2f}%</font>"
+                            )
+                        else:
+                            detail_header = (
+                                f"> 🚨 **超标 Billing 账号**: `{b['id']} ({bname})`\n"
+                                f"> - **当前单日费用**: <font color=\"warning\">${b['cost']:.2f}</font> (日期: {b['date']})"
+                            )
+                        
+                        top_projs_str_list = []
+                        for idx, p in enumerate(b['top_projects']):
+                            top_projs_str_list.append(f"> {idx+1}. `{p['project_id']}` : **${p['cost']:.2f}** (占比 {p['percentage']:.1f}%)")
+                        top_projs_block = "\n".join(top_projs_str_list) if top_projs_str_list else "> *(暂无项目明细数据)*"
+                        
+                        billing_details_list.append(f"{detail_header}\n>\n> 🔥 **该 Billing 下当日消费前 3 的 Top 项目**:\n{top_projs_block}")
                     
+                    billing_details_all = "\n\n---\n\n".join(billing_details_list)
+                    
+                    threshold_display = f"{config.threshold_percentage * 100:.1f}%" if config.alert_type == "relative" else f"${config.threshold:.2f}"
                     message_content = (
                         f"> 告警名称: {config.alert_name}{service_info}\n"
-                        f"> 告警类型: 环比告警 ({window_name})\n"
-                        f"> 设定阈值比例: {config.threshold_percentage * 100:.1f}%\n"
-                        f"> 检查范围: 过去 {days_to_check} 天\n"
-                        f"> 环比超标项目详情:\n{project_details_str}"
-                    )
-                    threshold_val = config.threshold_percentage
-                else:
-                    project_details = "\n".join([f"> - {p['id']}: ${p['cost']:.2f} (日期: {p['date']})" for p in exceeded_projects])
-                    message_content = f"> 告警名称: {config.alert_name}{service_info}\n> 检查范围: 过去 {days_to_check} 天\n> 超标项目及日费用:\n{project_details}"
-                    threshold_val = config.threshold
-                
-                if config.webhook_url:
-                    send_webhook_alert(
-                        config.webhook_url, 
-                        message_content,
-                        threshold_val, 
-                        f"{start_dt} to {end_dt}",
-                        is_relative=(config.alert_type == "relative")
+                        f"> 检查范围: 过去 {days_to_check} 天\n\n"
+                        f"{billing_details_all}"
                     )
                     
-                if config.email:
-                    send_email_alert(
-                        config.email,
-                        message_content,
-                        threshold_val,
-                        f"{start_dt} to {end_dt}",
-                        is_relative=(config.alert_type == "relative")
+                    if config.webhook_url:
+                        send_webhook_alert(config.webhook_url, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
+                    if config.email:
+                        send_email_alert(config.email, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
+
+            else:
+                # ==========================================
+                # 项目维度告警判定
+                # ==========================================
+                project_daily_costs = {}
+                project_billing_ids = {} # 统计项目对应的 Billing 账号
+
+                for u in usages:
+                    pid = u.project_id
+                    date_str = u.usage_date.strftime('%Y-%m-%d')
+                    if pid not in project_daily_costs:
+                        project_daily_costs[pid] = {}
+                    project_daily_costs[pid][date_str] = project_daily_costs[pid].get(date_str, 0.0) + u.cost
+                    if u.billing_account_id and isinstance(u.billing_account_id, str):
+                        project_billing_ids[pid] = u.billing_account_id
+
+                projects_to_check = config.project_ids if config.project_ids else list(project_daily_costs.keys())
+                exceeded_projects = []
+
+                for pid in projects_to_check:
+                    daily_costs = project_daily_costs.get(pid, {})
+                    exceeding_days = []
+                    current_date = start_dt
+                    
+                    while current_date <= end_dt:
+                        date_str = current_date.strftime('%Y-%m-%d')
+                        cost = daily_costs.get(date_str, 0.0)
+                        
+                        if config.alert_type == "relative":
+                            comp_days = get_comparison_days(config.comparison_window)
+                            history_date = current_date - timedelta(days=comp_days)
+                            history_date_str = history_date.strftime('%Y-%m-%d')
+                            history_cost = daily_costs.get(history_date_str, 0.0)
+                            
+                            if history_cost > 0:
+                                change_ratio = (cost - history_cost) / history_cost
+                                if change_ratio > config.threshold_percentage:
+                                    exceeding_days.append({
+                                        "date": date_str,
+                                        "cost": cost,
+                                        "history_date": history_date_str,
+                                        "history_cost": history_cost,
+                                        "change_ratio": change_ratio
+                                    })
+                        else:
+                            if cost > config.threshold:
+                                exceeding_days.append({
+                                    "date": date_str,
+                                    "cost": cost
+                                })
+                        current_date += timedelta(days=1)
+
+                    if exceeding_days:
+                        # 抑制 3 天内已处理的告警
+                        recent_handled = crud.get_recent_handled_incidents(db, pid, days=3)
+                        if recent_handled:
+                            continue
+                            
+                        # 24 小时内 pendings 去重
+                        import models
+                        recent_pending = db.query(models.AlertIncident).filter(
+                            models.AlertIncident.project_id == pid,
+                            models.AlertIncident.alert_config_id == config.id,
+                            models.AlertIncident.status == "pending",
+                            models.AlertIncident.created_at >= datetime.utcnow() - timedelta(hours=24)
+                        ).first()
+                        if recent_pending:
+                            continue
+
+                        exceeding_days.sort(key=lambda x: x['date'], reverse=True)
+                        latest_exceeding = exceeding_days[0]
+                        
+                        exceeded_project_info = {
+                            "id": pid, 
+                            "cost": latest_exceeding["cost"],
+                            "date": latest_exceeding["date"]
+                        }
+                        if config.alert_type == "relative":
+                            exceeded_project_info.update({
+                                "history_date": latest_exceeding["history_date"],
+                                "history_cost": latest_exceeding["history_cost"],
+                                "change_ratio": latest_exceeding["change_ratio"]
+                            })
+                        exceeded_projects.append(exceeded_project_info)
+                        
+                        # 写入 Incident
+                        incident_data = schemas.AlertIncidentCreate(
+                            alert_config_id=config.id,
+                            project_id=pid,
+                            billing_account_id=project_billing_ids.get(pid),
+                            cost=latest_exceeding["cost"],
+                            threshold=config.threshold_percentage if config.alert_type == "relative" else config.threshold,
+                            usage_date=latest_exceeding["date"]
+                        )
+                        crud.create_alert_incident(db, incident_data)
+
+                if exceeded_projects:
+                    logger.warning(f"ALERT: Project Config '{config.alert_name}' triggered for {len(exceeded_projects)} projects.")
+                    service_info = f" (服务: {config.service_description})" if config.service_description else ""
+                    threshold_val = config.threshold_percentage if config.alert_type == "relative" else config.threshold
+                    
+                    project_cards = []
+                    for idx, p in enumerate(exceeded_projects):
+                        cust_name = project_customer_map.get(p['id'], "未知客户")
+                        billing_id = project_billing_ids.get(p['id'], "未知Billing")
+                        b_display = f"{billing_id} ({billing_name_map.get(billing_id, '未知')})" if billing_id != "未知Billing" else "未知Billing"
+                        
+                        if config.alert_type == "relative":
+                            ratio_pct = p['change_ratio'] * 100
+                            card_item = (
+                                f"> 📦 **项目 [{idx+1}/{len(exceeded_projects)}]**: `{p['id']}`\n"
+                                f"> - **所属客户**: `{cust_name}`\n"
+                                f"> - **所属 Billing**: `{b_display}`\n"
+                                f"> - **当前费用**: <font color=\"warning\">${p['cost']:.2f}</font> (日期: {p['date']})\n"
+                                f"> - **历史费用**: ${p['history_cost']:.2f} (日期: {p['history_date']})\n"
+                                f"> - **费用涨幅**: <font color=\"warning\">{ratio_pct:+.2f}%</font>"
+                            )
+                        else:
+                            card_item = (
+                                f"> 📦 **项目 [{idx+1}/{len(exceeded_projects)}]**: `{p['id']}`\n"
+                                f"> - **所属客户**: `{cust_name}`\n"
+                                f"> - **所属 Billing**: `{b_display}`\n"
+                                f"> - **单日费用**: <font color=\"warning\">${p['cost']:.2f}</font> (日期: {p['date']})"
+                            )
+                        project_cards.append(card_item)
+
+                    project_details_all = "\n>\n> ---\n>\n".join(project_cards)
+                    message_content = (
+                        f"> 告警名称: {config.alert_name}{service_info}\n"
+                        f"> 检查范围: 过去 {days_to_check} 天\n\n"
+                        f"> 🚨 **以下项目超出阈值（共 {len(exceeded_projects)} 个）**:\n>\n"
+                        f"{project_details_all}"
                     )
+
+                    if config.webhook_url:
+                        send_webhook_alert(config.webhook_url, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
+                    if config.email:
+                        send_email_alert(config.email, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
+
     finally:
         db.close()
 
