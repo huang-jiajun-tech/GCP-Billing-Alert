@@ -15,6 +15,20 @@ const AlertSettings = () => {
   const [triggeringCheck, setTriggeringCheck] = useState(false);
   const [form] = Form.useForm();
 
+  const [billingAccounts, setBillingAccounts] = useState([]);
+  const fetchBillingAccounts = async () => {
+    try {
+      const response = await api.get('/billing-accounts');
+      setBillingAccounts(response.data);
+    } catch (err) {
+      console.error("Failed to load billing accounts", err);
+    }
+  };
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchBillingAccounts();
+  }, []);
+
   useEffect(() => {
     fetchConfigs();
   }, []);
@@ -39,6 +53,8 @@ const AlertSettings = () => {
       is_active: true, 
       threshold: 100, 
       project_ids: [], 
+      billing_account_ids: [],
+      dimension: 'project',
       time_range_days: 1, 
       service_description: '',
       alert_type: 'absolute',
@@ -59,6 +75,7 @@ const AlertSettings = () => {
     form.setFieldsValue({
       ...record,
       project_ids: record.project_ids || [],
+      billing_account_ids: record.billing_account_ids || [],
       threshold_percentage: record.threshold_percentage ? record.threshold_percentage * 100 : 50,
       comparison_window: compWindow,
       custom_comparison_days: customDays
@@ -86,7 +103,8 @@ const AlertSettings = () => {
       }
       const payload = {
         ...values,
-        project_ids: values.project_ids && values.project_ids.length > 0 ? values.project_ids : null,
+        project_ids: values.dimension === 'project' && values.project_ids && values.project_ids.length > 0 ? values.project_ids : null,
+        billing_account_ids: values.dimension === 'billing' && values.billing_account_ids && values.billing_account_ids.length > 0 ? values.billing_account_ids : null,
         threshold_percentage: values.alert_type === 'relative' && values.threshold_percentage ? values.threshold_percentage / 100 : null,
         comparison_window: values.alert_type === 'relative' ? compWindow : null,
         threshold: values.alert_type === 'absolute' ? values.threshold : 0
@@ -166,18 +184,17 @@ const AlertSettings = () => {
       render: (text) => <Text strong>{text}</Text>,
     },
     {
-      title: 'Target Projects',
-      dataIndex: 'project_ids',
-      key: 'project_ids',
-      render: (projectIds) => {
-        if (!projectIds || projectIds.length === 0) {
-          return <Tag color="blue">All Projects</Tag>;
+      title: 'Targets',
+      key: 'targets',
+      render: (_, record) => {
+        if (record.dimension === 'billing') {
+          const baccs = record.billing_account_ids;
+          if (!baccs || baccs.length === 0) return <Tag color="orange">All Billing Accounts</Tag>;
+          return <Space wrap>{baccs.map(b => <Tag color="orange" key={b}>{b}</Tag>)}</Space>;
         }
-        return (
-          <Space wrap>
-            {projectIds.map(pid => <Tag key={pid}>{pid}</Tag>)}
-          </Space>
-        );
+        const projectIds = record.project_ids;
+        if (!projectIds || projectIds.length === 0) return <Tag color="blue">All Projects</Tag>;
+        return <Space wrap>{projectIds.map(pid => <Tag key={pid}>{pid}</Tag>)}</Space>;
       }
     },
     {
@@ -309,16 +326,53 @@ const AlertSettings = () => {
           </Form.Item>
 
           <Form.Item
-            name="project_ids"
-            label="Target Projects (Leave empty for All Projects)"
+            name="dimension"
+            label="Alert Dimension (监控维度)"
+            rules={[{ required: true, message: 'Please select dimension' }]}
           >
-            <Select
-              mode="tags"
-              style={{ width: '100%' }}
-              placeholder="Type project IDs and press enter"
-              tokenSeparators={[',']}
-            >
+            <Select onChange={() => form.setFieldsValue({ project_ids: [], billing_account_ids: [] })}>
+              <Option value="project">Project Level (项目级)</Option>
+              <Option value="billing">Billing Account Level (Billing级)</Option>
             </Select>
+          </Form.Item>
+
+          <Form.Item
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => prevValues.dimension !== currentValues.dimension}
+          >
+            {({ getFieldValue }) => 
+              getFieldValue('dimension') === 'billing' ? (
+                <Form.Item
+                  name="billing_account_ids"
+                  label="Target Billing Accounts (Leave empty for All)"
+                >
+                  <Select
+                    mode="multiple"
+                    style={{ width: '100%' }}
+                    placeholder="Select Billing Accounts to monitor"
+                    optionFilterProp="children"
+                  >
+                    {billingAccounts.map(b => (
+                      <Option key={b.billing_account_id} value={b.billing_account_id}>
+                        {b.display_name} ({b.billing_account_id})
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              ) : (
+                <Form.Item
+                  name="project_ids"
+                  label="Target Projects (Leave empty for All Projects)"
+                >
+                  <Select
+                    mode="tags"
+                    style={{ width: '100%' }}
+                    placeholder="Type project IDs and press enter"
+                    tokenSeparators={[',']}
+                  />
+                </Form.Item>
+              )
+            }
           </Form.Item>
           
           <Form.Item

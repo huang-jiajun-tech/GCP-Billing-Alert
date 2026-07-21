@@ -92,10 +92,16 @@ const AlertIncidents = () => {
       render: (val) => dayjs(val).format('YYYY-MM-DD HH:mm:ss'),
     },
     {
-      title: 'Project ID',
-      dataIndex: 'project_id',
-      key: 'project_id',
-      render: (text) => <Text strong>{text}</Text>,
+      title: 'Target Entity',
+      key: 'target_entity',
+      render: (_, record) => {
+        if (record.project_id) {
+          return <Text strong>{record.project_id}</Text>;
+        } else if (record.billing_account_id) {
+          return <Tag color="orange">Billing: {record.billing_account_id}</Tag>;
+        }
+        return <Text type="secondary">-</Text>;
+      }
     },
     {
       title: 'Cost / Threshold',
@@ -207,10 +213,18 @@ const AlertIncidents = () => {
         okText="Mark as Handled"
       >
         <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 4 }}>
-          <Text strong>Project: </Text> <Text>{handlingIncident?.project_id}</Text><br/>
+          {handlingIncident?.project_id ? (
+            <>
+              <Text strong>Project: </Text> <Text>{handlingIncident?.project_id}</Text><br/>
+            </>
+          ) : (
+            <>
+              <Text strong>Billing Account: </Text> <Text>{handlingIncident?.billing_account_id}</Text><br/>
+            </>
+          )}
           <Text strong>Cost: </Text> <Text type="danger">${handlingIncident?.cost}</Text><br/>
           <Text type="secondary" style={{ fontSize: 12 }}>
-            * Marking this as handled will suppress new alerts for this project for the next 3 days.
+            * Marking this as handled will suppress new alerts for this entity for the next 3 days.
           </Text>
         </div>
         <Form form={form} layout="vertical">
