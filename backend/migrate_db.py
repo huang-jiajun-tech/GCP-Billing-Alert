@@ -39,6 +39,26 @@ def migrate():
         ADD COLUMN IF NOT EXISTS threshold_percentage DOUBLE PRECISION;
     """)
 
+    print("Adding dimension and billing_account_ids columns to alert_configs table...")
+    cursor.execute("""
+        ALTER TABLE alert_configs 
+        ADD COLUMN IF NOT EXISTS dimension VARCHAR NOT NULL DEFAULT 'project';
+    """)
+    cursor.execute("""
+        ALTER TABLE alert_configs 
+        ADD COLUMN IF NOT EXISTS billing_account_ids JSONB;
+    """)
+
+    print("Adding billing_account_id column and modifying project_id in alert_incidents table...")
+    cursor.execute("""
+        ALTER TABLE alert_incidents 
+        ADD COLUMN IF NOT EXISTS billing_account_id VARCHAR;
+    """)
+    cursor.execute("""
+        ALTER TABLE alert_incidents 
+        ALTER COLUMN project_id DROP NOT NULL;
+    """)
+
     print("Database migration completed successfully.")
     cursor.close()
     conn.close()

@@ -41,13 +41,16 @@ class AlertConfig(Base):
     alert_type = Column(String, nullable=False, default="absolute") # "absolute" or "relative"
     comparison_window = Column(String, nullable=True) # "week" or "month"
     threshold_percentage = Column(Float, nullable=True) # e.g., 0.5 for 50%
+    dimension = Column(String, nullable=False, default="project") # "project" or "billing"
+    billing_account_ids = Column(JSONB, nullable=True) # List of billing account IDs, null means all
 
 class AlertIncident(Base):
     __tablename__ = "alert_incidents"
 
     id = Column(Integer, primary_key=True, index=True)
     alert_config_id = Column(Integer, ForeignKey("alert_configs.id"), nullable=False)
-    project_id = Column(String, index=True, nullable=False)
+    project_id = Column(String, index=True, nullable=True) # 改为 nullable=True
+    billing_account_id = Column(String, index=True, nullable=True) # 新增字段
     cost = Column(Float, nullable=False)
     threshold = Column(Float, nullable=False)
     usage_date = Column(String, nullable=False)
