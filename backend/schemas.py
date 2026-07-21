@@ -54,6 +54,8 @@ class AlertConfigBase(BaseModel):
     alert_type: str = "absolute" # "absolute" or "relative"
     comparison_window: Optional[str] = None # "week" or "month"
     threshold_percentage: Optional[float] = None # e.g., 0.5 for 50%
+    dimension: str = "project" # "project" or "billing"
+    billing_account_ids: Optional[List[str]] = None
 
 class AlertConfigCreate(AlertConfigBase):
     pass
@@ -73,7 +75,8 @@ class AlertTestRequest(BaseModel):
 
 class AlertIncidentBase(BaseModel):
     alert_config_id: int
-    project_id: str
+    project_id: Optional[str] = None # 改为 Optional
+    billing_account_id: Optional[str] = None # 新增
     cost: float
     threshold: float
     usage_date: str
