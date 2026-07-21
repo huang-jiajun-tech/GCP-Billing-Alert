@@ -307,6 +307,9 @@ def get_project_usage(project_id: str, date: str = None):
 # --- Alert Configuration APIs ---
 
 def validate_alert_config(config):
+    if config.dimension not in ["project", "billing"]:
+        raise HTTPException(status_code=400, detail="dimension must be either 'project' or 'billing'")
+        
     if config.alert_type not in ["absolute", "relative"]:
         raise HTTPException(status_code=400, detail="alert_type must be either 'absolute' or 'relative'")
     

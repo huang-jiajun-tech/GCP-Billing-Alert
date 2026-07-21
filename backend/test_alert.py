@@ -24,6 +24,30 @@ class TestAlertConfigValidation(unittest.TestCase):
         # Should not raise exception
         validate_alert_config(config)
 
+    def test_dimension_validation_success_billing(self):
+        # Valid billing dimension alert
+        config = schemas.AlertConfigCreate(
+            alert_name="Test Billing Dimension",
+            threshold=100.0,
+            alert_type="absolute",
+            dimension="billing"
+        )
+        # Should not raise exception
+        validate_alert_config(config)
+
+    def test_dimension_validation_failure_invalid(self):
+        # Invalid dimension parameter value
+        config = schemas.AlertConfigCreate(
+            alert_name="Test Invalid Dimension",
+            threshold=100.0,
+            alert_type="absolute",
+            dimension="invalid_dimension"
+        )
+        with self.assertRaises(HTTPException) as context:
+            validate_alert_config(config)
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(context.exception.detail, "dimension must be either 'project' or 'billing'")
+
     def test_absolute_alert_validation_failure(self):
         # Invalid absolute alert (threshold <= 0)
         config = schemas.AlertConfigCreate(
