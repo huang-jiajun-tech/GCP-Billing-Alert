@@ -465,27 +465,35 @@ def check_billing_and_alert():
                         if config.alert_type == "relative":
                             ratio_pct = p['change_ratio'] * 100
                             card_item = (
-                                f"> 📦 **项目 [{idx+1}/{len(exceeded_projects)}]**: `{p['id']}`\n"
-                                f"> - **所属客户**: `{cust_name}`\n"
-                                f"> - **所属 Billing**: `{b_display}`\n"
-                                f"> - **当前费用**: <font color=\"warning\">${p['cost']:.2f}</font> (日期: {p['date']})\n"
-                                f"> - **历史费用**: ${p['history_cost']:.2f} (日期: {p['history_date']})\n"
-                                f"> - **费用涨幅**: <font color=\"warning\">{ratio_pct:+.2f}%</font>"
+                                f"**📦 超标项目 [{idx+1}/{len(exceeded_projects)}]**：`{p['id']}`\n"
+                                f"* **所属客户**：`{cust_name}`\n"
+                                f"* **所属 Billing**：`{b_display}`\n"
+                                f"* **当前费用**：<font color=\"warning\">${p['cost']:.2f}</font> (日期: {p['date']})\n"
+                                f"* **历史费用**：<font color=\"comment\">${p['history_cost']:.2f}</font> (日期: {p['history_date']})\n"
+                                f"* **费用涨幅**：<font color=\"warning\">{ratio_pct:+.2f}%</font>"
                             )
                         else:
                             card_item = (
-                                f"> 📦 **项目 [{idx+1}/{len(exceeded_projects)}]**: `{p['id']}`\n"
-                                f"> - **所属客户**: `{cust_name}`\n"
-                                f"> - **所属 Billing**: `{b_display}`\n"
-                                f"> - **单日费用**: <font color=\"warning\">${p['cost']:.2f}</font> (日期: {p['date']})"
+                                f"**📦 超标项目 [{idx+1}/{len(exceeded_projects)}]**：`{p['id']}`\n"
+                                f"* **所属客户**：`{cust_name}`\n"
+                                f"* **所属 Billing**：`{b_display}`\n"
+                                f"* **单日费用**：<font color=\"warning\">${p['cost']:.2f}</font> (日期: {p['date']})"
                             )
                         project_cards.append(card_item)
 
-                    project_details_all = "\n>\n> ---\n>\n".join(project_cards)
+                    project_details_all = "\n\n---\n\n".join(project_cards)
+                    
+                    threshold_display = f"{config.threshold_percentage * 100:.1f}%" if config.alert_type == "relative" else f"${config.threshold:.2f}"
                     message_content = (
-                        f"> 告警名称: {config.alert_name}{service_info}\n"
-                        f"> 检查范围: 过去 {days_to_check} 天\n\n"
-                        f"> 🚨 **以下项目超出阈值（共 {len(exceeded_projects)} 个）**:\n>\n"
+                        f"### 🔴 GCP 费用超标告警\n"
+                        f"---\n"
+                        f"**📊 基本信息**\n"
+                        f"* **告警名称**：`{config.alert_name}`{service_info}\n"
+                        f"* **告警日期**：<font color=\"comment\">{start_dt} to {end_dt}</font>\n"
+                        f"* **检查范围**：<font color=\"comment\">过去 {days_to_check} 天</font>\n"
+                        f"* **设定的告警阈值**：<font color=\"comment\">{threshold_display}</font>\n\n"
+                        f"**🚨 异常详情（共 {len(exceeded_projects)} 个项目超标）**\n"
+                        f"---\n"
                         f"{project_details_all}"
                     )
 

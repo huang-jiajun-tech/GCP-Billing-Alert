@@ -163,6 +163,19 @@ class TestAlertSchedulerLogic(unittest.TestCase):
         
         # Verify webhook was called
         mock_send_webhook.assert_called_once()
+        call_args = mock_send_webhook.call_args[0]
+        webhook_url_arg = call_args[0]
+        message_content_arg = call_args[1]
+        
+        self.assertEqual(webhook_url_arg, "http://mock-webhook")
+        self.assertIn("### 🔴 GCP 费用超标告警\n", message_content_arg)
+        self.assertIn("Relative Week Alert", message_content_arg)
+        self.assertIn("**📦 超标项目 [1/1]**：`proj-1`", message_content_arg)
+        self.assertIn("* **当前费用**：<font color=\"warning\">$160.00</font>", message_content_arg)
+        self.assertIn("* **费用涨幅**：<font color=\"warning\">+60.00%</font>", message_content_arg)
+        self.assertNotIn("\n>", message_content_arg) # Ensure no blockquotes
+        self.assertFalse(message_content_arg.startswith(">"))
+        
         # Verify incident was created
         mock_crud.create_alert_incident.assert_called_once()
 
@@ -415,6 +428,63 @@ class TestAlertSchedulerLogic(unittest.TestCase):
         self.assertIn("proj-b", args[1]) # Top 2
         # 验证涨幅数据在格式化内容中 (60.00%)
         self.assertIn("+60.00%", args[1])
+
+    @patch('scheduler.SessionLocal')
+    @patch('scheduler.crud')
+    @patch('scheduler.send_webhook_alert')
+    def test_absolute_project_alert_trigger(self, mock_send_webhook, mock_crud, mock_session_local):
+        mock_db = MagicMock()
+        mock_session_local.return_value = mock_db
+        
+        # Mock billing accounts display names
+        billing_acc = MagicMock(billing_account_id="billing-123", display_name="Test Billing Account")
+        mock_crud.get_billing_accounts.return_value = [billing_acc]
+        
+        # Mock project info for customer names
+        proj_info = MagicMock(project_id="proj-absolute", customer_name="Customer XYZ")
+        mock_crud.get_all_project_infos.return_value = [proj_info]
+
+        config = models.AlertConfig(
+            id=3,
+            alert_name="Project Absolute Alert",
+            alert_type="absolute",
+            threshold=50.0,
+            time_range_days=1,
+            is_active=True,
+            dimension="project",
+            webhook_url="http://mock-webhook"
+        )
+        mock_crud.get_alert_configs.return_value = [config]
+        
+        yesterday = (datetime.utcnow() - timedelta(days=1)).date()
+        
+        # Current cost is $75.0, which exceeds absolute threshold of $50.0
+        usage_current = MagicMock(project_id="proj-absolute", billing_account_id="billing-123", cost=75.0, usage_date=yesterday)
+        
+        mock_crud.get_daily_usage.return_value = [usage_current]
+        mock_crud.get_recent_handled_incidents.return_value = []
+        mock_db.query().filter().first.return_value = None
+        
+        check_billing_and_alert()
+        
+        # Verify webhook was called with correct arguments
+        mock_send_webhook.assert_called_once()
+        call_args = mock_send_webhook.call_args[0]
+        webhook_url_arg = call_args[0]
+        message_content_arg = call_args[1]
+        
+        self.assertEqual(webhook_url_arg, "http://mock-webhook")
+        self.assertIn("### 🔴 GCP 费用超标告警\n", message_content_arg)
+        self.assertIn("Project Absolute Alert", message_content_arg)
+        self.assertIn("**📦 超标项目 [1/1]**：`proj-absolute`", message_content_arg)
+        self.assertIn("* **所属客户**：`Customer XYZ`", message_content_arg)
+        self.assertIn("* **所属 Billing**：`billing-123 (Test Billing Account)`", message_content_arg)
+        self.assertIn("* **单日费用**：<font color=\"warning\">$75.00</font>", message_content_arg)
+        self.assertNotIn("\n>", message_content_arg) # Ensure no blockquotes
+        self.assertFalse(message_content_arg.startswith(">"))
+        
+        # Verify incident was created
+        mock_crud.create_alert_incident.assert_called_once()
 
 class TestSendWebhookAlert(unittest.TestCase):
     @patch('scheduler.requests.post')
