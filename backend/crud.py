@@ -86,6 +86,8 @@ def update_alert_config(db: Session, config_id: int, config: schemas.AlertConfig
     return db_config
 
 def delete_alert_config(db: Session, config_id: int):
+    # Delete associated alert incidents first to prevent ForeignKeyViolation
+    db.query(models.AlertIncident).filter(models.AlertIncident.alert_config_id == config_id).delete()
     db_config = get_alert_config(db, config_id)
     if db_config:
         db.delete(db_config)

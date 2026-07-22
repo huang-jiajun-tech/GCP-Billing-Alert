@@ -574,5 +574,45 @@ class TestSendWebhookAlert(unittest.TestCase):
         send_webhook_alert("", "Some message", 100.0, "2026-07-22")
         mock_post.assert_not_called()
 
+class TestDeleteAlertConfigCascade(unittest.TestCase):
+    def test_delete_alert_config_cascade_incidents(self):
+        import crud
+        mock_db = MagicMock()
+        
+        # Setup mock return values for get_alert_config
+        mock_config = models.AlertConfig(id=4, alert_name="Test Delete Cascade")
+        
+        # We need mock_db.query to handle both AlertIncident and AlertConfig differently if needed,
+        # but since we're using MagicMock we can mock the chain of calls
+        mock_query_incident = MagicMock()
+        mock_query_config = MagicMock()
+        
+        # Assign mock_db.query to return different query chain mocks depending on the argument
+        def query_side_effect(model):
+            if model == models.AlertIncident:
+                return mock_query_incident
+            elif model == models.AlertConfig:
+                return mock_query_config
+            return MagicMock()
+        mock_db.query.side_effect = query_side_effect
+        
+        mock_query_config.filter.return_value.first.return_value = mock_config
+        
+        # Run deletion
+        deleted_config = crud.delete_alert_config(mock_db, config_id=4)
+        
+        # Assertions
+        # 1. Incident deletion chain was called
+        mock_query_incident.filter.assert_called_once()
+        mock_query_incident.filter.return_value.delete.assert_called_once()
+        
+        # 2. Config query filter was called
+        mock_query_config.filter.assert_called_once()
+        
+        # 3. Config deletion was called with the matching config object
+        mock_db.delete.assert_called_once_with(mock_config)
+        mock_db.commit.assert_called_once()
+        self.assertEqual(deleted_config, mock_config)
+
 if __name__ == '__main__':
     unittest.main()
