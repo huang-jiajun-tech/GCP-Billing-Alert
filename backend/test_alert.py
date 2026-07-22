@@ -11,7 +11,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import schemas
 import models
 from main import validate_alert_config
-from scheduler import check_billing_and_alert
+from scheduler import check_billing_and_alert, send_webhook_alert
 
 class TestAlertConfigValidation(unittest.TestCase):
     def test_absolute_alert_validation_success(self):
@@ -415,6 +415,94 @@ class TestAlertSchedulerLogic(unittest.TestCase):
         self.assertIn("proj-b", args[1]) # Top 2
         # 验证涨幅数据在格式化内容中 (60.00%)
         self.assertIn("+60.00%", args[1])
+
+class TestSendWebhookAlert(unittest.TestCase):
+    @patch('scheduler.requests.post')
+    def test_send_webhook_alert_beautified(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_post.return_value = mock_response
+
+        webhook_url = "http://mock-webhook"
+        message_content = "### 🔴 GCP 费用超标告警\n---\n**📊 基本信息**"
+        send_webhook_alert(webhook_url, message_content, 100.0, "2026-07-22")
+
+        mock_post.assert_called_once()
+        called_json = mock_post.call_args[1]["json"]
+        self.assertEqual(called_json["markdown"]["content"], message_content)
+
+    @patch('scheduler.requests.post')
+    def test_send_webhook_alert_system_test(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_post.return_value = mock_response
+
+        webhook_url = "http://mock-webhook"
+        message_content = "🔔 这是一条系统测试通知"
+        send_webhook_alert(webhook_url, message_content, 100.0, "2026-07-22")
+
+        mock_post.assert_called_once()
+        called_json = mock_post.call_args[1]["json"]
+        expected_content = (
+            f"### 🔴 GCP 费用超标告警\n"
+            f"---\n"
+            f"**📊 基本信息**\n"
+            f"* **测试日期**：<font color=\"comment\">2026-07-22</font>\n\n"
+            f"**📢 测试内容**：\n"
+            f"🔔 这是一条系统测试通知"
+        )
+        self.assertEqual(called_json["markdown"]["content"], expected_content)
+
+    @patch('scheduler.requests.post')
+    def test_send_webhook_alert_legacy_fallback_absolute(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_post.return_value = mock_response
+
+        webhook_url = "http://mock-webhook"
+        message_content = "Some legacy error alert message"
+        send_webhook_alert(webhook_url, message_content, 150.5, "2026-07-22", is_relative=False)
+
+        mock_post.assert_called_once()
+        called_json = mock_post.call_args[1]["json"]
+        expected_content = (
+            f"### 🔴 GCP 费用超标告警\n"
+            f"---\n"
+            f"**📊 基本信息**\n"
+            f"* **告警日期**：<font color=\"comment\">2026-07-22</font>\n"
+            f"* **设定的告警阈值**：<font color=\"comment\">$150.50</font>\n\n"
+            f"**📋 详细内容**：\n"
+            f"Some legacy error alert message"
+        )
+        self.assertEqual(called_json["markdown"]["content"], expected_content)
+
+    @patch('scheduler.requests.post')
+    def test_send_webhook_alert_legacy_fallback_relative(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_post.return_value = mock_response
+
+        webhook_url = "http://mock-webhook"
+        message_content = "Some legacy relative alert message"
+        send_webhook_alert(webhook_url, message_content, 0.55, "2026-07-22", is_relative=True)
+
+        mock_post.assert_called_once()
+        called_json = mock_post.call_args[1]["json"]
+        expected_content = (
+            f"### 🔴 GCP 费用超标告警\n"
+            f"---\n"
+            f"**📊 基本信息**\n"
+            f"* **告警日期**：<font color=\"comment\">2026-07-22</font>\n"
+            f"* **设定的告警阈值**：<font color=\"comment\">55.0%</font>\n\n"
+            f"**📋 详细内容**：\n"
+            f"Some legacy relative alert message"
+        )
+        self.assertEqual(called_json["markdown"]["content"], expected_content)
+
+    @patch('scheduler.requests.post')
+    def test_send_webhook_alert_no_url(self, mock_post):
+        send_webhook_alert("", "Some message", 100.0, "2026-07-22")
+        mock_post.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()
