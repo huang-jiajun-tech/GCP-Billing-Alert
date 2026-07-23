@@ -158,7 +158,7 @@ class SyncLogCreate(BaseModel):
 class SyncLog(SyncLogBase):
     id: int
     status: str
-    records_synced: int
+    records_synced: Optional[int] = 0
     error_message: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
