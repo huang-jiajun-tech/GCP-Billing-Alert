@@ -1,8 +1,8 @@
-# Design Spec: WeCom Quote-Block Overview & Card Redesign
+# Design Spec: WeCom Quote-Block Overview & Card Redesign (Chinese Labels)
 
 **Date**: 2026-07-23  
 **Status**: APPROVED  
-**Goal**: Redesign WeChat Work (WeCom) alert notifications to use a clean Overview top block followed by individual quote blocks for each triggered project or billing account, strictly adhering to a single accent color (`<font color="warning">`) for cost values.
+**Goal**: Redesign WeChat Work (WeCom) alert notifications to use a clean Chinese Overview top block followed by individual quote blocks for each triggered project or billing account, strictly adhering to a single accent color (`<font color="warning">`) for cost values.
 
 ---
 
@@ -10,17 +10,17 @@
 
 ### Layout Architecture
 Each alert message is divided into two distinct logical sections:
-1. **Overview Section (总览区)**:
-   - `# 🔴 GCP Billing Alert` header
-   - Blockquote containing service description or alert name context
-   - `**Threshold**` label followed by `🟠 $10,000.00` or `🟠 50.0%`
-   - `**Alert Date**` label followed by `{start_dt} ~ {end_dt}`
-   - `**Projects Triggered**` / `**Billings Triggered**` count
+1. **Overview Section (总览区 - 中文)**:
+   - `# 🔴 GCP 费用超标告警` header
+   - Blockquote containing service description or alert name context (e.g., `> Vertex AI 日费用超标`)
+   - `**告警阈值**` label followed by `🟠 $10,000.00` or `🟠 50.0%`
+   - `**告警日期**` label followed by `{start_dt} ~ {end_dt}`
+   - `**超标项目数**` / `**超标 Billing 数**` count
 
-2. **Item Quote-Block Section (明细卡片区)**:
+2. **Item Quote-Block Section (明细卡片区 - 中文)**:
    - Level-2 header per item: `## 📦 {project_id}` or `## 💳 {billing_id} ({billing_name})`
    - Single quote block (`>`) containing all key-value attributes for that item
-   - Key attributes formatted cleanly with dedicated emojis (`💰 Cost`, `📈 Increase`, `📜 History Cost`, `📅 Date`, `🏢 Billing`, `👤 Customer`, `🔝 Top Projects`)
+   - Key attributes formatted cleanly with dedicated emojis (`💰 单日费用`, `📈 费用涨幅`, `📜 历史费用`, `📅 费用日期`, `🏢 所属 Billing`, `👤 所属客户`, `🔝 Top 消费项目`)
 
 ---
 
@@ -40,41 +40,41 @@ Each alert message is divided into two distinct logical sections:
 ### 3.1 Project Dimension Template (Absolute & Relative)
 
 ```markdown
-# 🔴 GCP Billing Alert
+# 🔴 GCP 费用超标告警
 
-> Vertex AI Daily Cost Exceeded
+> Vertex AI 日费用超标
 
-**Threshold**
+**告警阈值**
 🟠 $10,000.00
 
-**Alert Date**
+**告警日期**
 2026-07-19 ~ 2026-07-21
 
-**Projects Triggered**
+**超标项目数**
 3
 
 ## 📦 dmqt-260527
-> 💰 Cost: <font color="warning">$10,528.31</font>
-> 📅 Date: 2026-07-19
-> 🏢 Billing: `014945-B990E9-0ABB7C (dam-cm-128a)`
-> 👤 Customer: Unknown
+> 💰 单日费用：<font color="warning">$10,528.31</font>
+> 📅 费用日期：2026-07-19
+> 🏢 所属 Billing：`014945-B990E9-0ABB7C (dam-cm-128a)`
+> 👤 所属客户：未知客户
 
 ## 📦 wpqt-260527
-> 💰 Cost: <font color="warning">$10,493.89</font>
-> 📅 Date: 2026-07-19
-> 🏢 Billing: `018FE4-A7883B-43CCAF (wepie-cm-128a)`
-> 👤 Customer: Unknown
+> 💰 单日费用：<font color="warning">$10,493.89</font>
+> 📅 费用日期：2026-07-19
+> 🏢 所属 Billing：`018FE4-A7883B-43CCAF (wepie-cm-128a)`
+> 👤 所属客户：未知客户
 ```
 
 *For Relative Alerts (Project Dimension)*:
 ```markdown
 ## 📦 dmqt-260527
-> 💰 Cost: <font color="warning">$10,528.31</font>
-> 📈 Increase: <font color="warning">+60.00%</font>
-> 📜 History Cost: $6,580.00
-> 📅 Date: 2026-07-19
-> 🏢 Billing: `014945-B990E9-0ABB7C (dam-cm-128a)`
-> 👤 Customer: Unknown
+> 💰 单日费用：<font color="warning">$10,528.31</font>
+> 📈 费用涨幅：<font color="warning">+60.00%</font>
+> 📜 历史费用：$6,580.00
+> 📅 费用日期：2026-07-19
+> 🏢 所属 Billing：`014945-B990E9-0ABB7C (dam-cm-128a)`
+> 👤 所属客户：未知客户
 ```
 
 ---
@@ -82,23 +82,23 @@ Each alert message is divided into two distinct logical sections:
 ### 3.2 Billing Dimension Template (Absolute & Relative)
 
 ```markdown
-# 🔴 GCP Billing Alert
+# 🔴 GCP 费用超标告警
 
-> Billing Absolute Alert
+> Billing 账号额度监控
 
-**Threshold**
+**告警阈值**
 🟠 $1,000.00
 
-**Alert Date**
+**告警日期**
 2026-07-21 ~ 2026-07-21
 
-**Billings Triggered**
+**超标 Billing 数**
 1
 
 ## 💳 014945-B990E9-0ABB7C (Main Billing)
-> 💰 Cost: <font color="warning">$1,200.00</font>
-> 📅 Date: 2026-07-21
-> 🔝 Top Projects:
+> 💰 单日费用：<font color="warning">$1,200.00</font>
+> 📅 费用日期：2026-07-21
+> 🔝 Top 消费项目：
 > 1. `proj-a` : **$500.00** (41.7%)
 > 2. `proj-b` : **$400.00** (33.3%)
 > 3. `proj-c` : **$200.00** (16.7%)
@@ -109,14 +109,14 @@ Each alert message is divided into two distinct logical sections:
 ### 3.3 Helper Wrapper (`send_webhook_alert`) Template
 
 ```markdown
-# 🔴 GCP Billing Alert
+# 🔴 GCP 费用超标告警
 
-> System Connection Test
+> 系统连接测试
 
-**Alert Date**
+**测试日期**
 2026-07-22
 
-**Test Content**
+**测试内容**
 🔔 这是一条系统测试通知
 ```
 
@@ -124,5 +124,5 @@ Each alert message is divided into two distinct logical sections:
 
 ## 4. Verification & Testing
 
-1. All 23 unit tests in `backend/test_alert.py` will be updated to match the exact new structure and assertions.
+1. All 23 unit tests in `backend/test_alert.py` will be updated to match the exact Chinese label structure and assertions.
 2. Verified using bypassed sandbox execution: `/Users/huangjiajun/Project/Billing_Alert/backend/venv/bin/python test_alert.py`.

@@ -1,8 +1,8 @@
-# WeCom Quote-Block Overview Redesign Implementation Plan
+# WeCom Quote-Block Overview Redesign Implementation Plan (Chinese Labels)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Redesign WeCom Markdown notification alert text generation to use an Overview top block followed by clean, individual quote-block cards per item, strictly applying a single accent color (`<font color="warning">`) to cost numbers.
+**Goal:** Redesign WeCom Markdown notification alert text generation to use a Chinese Overview top block followed by clean, individual quote-block cards per item, strictly applying a single accent color (`<font color="warning">`) to cost numbers.
 
 **Architecture:** Update text formatting routines in `backend/scheduler.py` for helper wrapper (`send_webhook_alert`), Billing dimension alerts, and Project dimension alerts in `check_billing_and_alert`. Update unit test suite assertions in `backend/test_alert.py`.
 
@@ -12,6 +12,7 @@
 
 - **Code Integrity**: Preserve all unrelated comments and docstrings.
 - **Single Accent Color**: ONLY use `<font color="warning">` for cost values and increase ratios. No `<font color="comment">` or `<font color="info">`.
+- **Chinese Labels**: All field labels (e.g. `告警阈值`, `告警日期`, `单日费用`, `所属 Billing`, `所属客户`, `Top 消费项目`) must use Chinese.
 - **Test Verification**: All 23 unit tests in `backend/test_alert.py` must pass using bypassed sandbox python (`backend/venv/bin/python test_alert.py`).
 
 ---
@@ -42,24 +43,24 @@ def send_webhook_alert(webhook_url: str, message_content: str, threshold: float,
     elif message_content.startswith("🔔"):
         # 系统测试通知
         content = (
-            f"# 🔴 GCP Billing Alert\n"
-            f"> System Connection Test\n\n"
-            f"**Alert Date**\n"
+            f"# 🔴 GCP 费用超标告警\n\n"
+            f"> 系统连接测试\n\n"
+            f"**测试日期**\n"
             f"{date}\n\n"
-            f"**Test Content**\n"
+            f"**测试内容**\n"
             f"{message_content}"
         )
     else:
         # 兼容性回退
         threshold_display = f"{threshold * 100:.1f}%" if is_relative else f"${threshold:.2f}"
         content = (
-            f"# 🔴 GCP Billing Alert\n"
-            f"> Legacy Alert Message\n\n"
-            f"**Threshold**\n"
+            f"# 🔴 GCP 费用超标告警\n\n"
+            f"> 告警通知\n\n"
+            f"**告警阈值**\n"
             f"🟠 {threshold_display}\n\n"
-            f"**Alert Date**\n"
+            f"**告警日期**\n"
             f"{date}\n\n"
-            f"**Details**\n"
+            f"**详细内容**\n"
             f"{message_content}"
         )
         
@@ -81,7 +82,7 @@ def send_webhook_alert(webhook_url: str, message_content: str, threshold: float,
 
 - [ ] **Step 2: Update `TestSendWebhookAlert` test assertions in `backend/test_alert.py`**
 
-Update `test_send_webhook_alert_system_test` and `test_send_webhook_alert_legacy_fallback_*` to assert the exact `# 🔴 GCP Billing Alert` overview structure.
+Update `test_send_webhook_alert_system_test` and `test_send_webhook_alert_legacy_fallback_*` to assert the exact `# 🔴 GCP 费用超标告警` overview structure with Chinese labels.
 
 - [ ] **Step 3: Run unit tests to verify**
 
@@ -92,7 +93,7 @@ Expected: `OK`
 
 ```bash
 git add backend/scheduler.py backend/test_alert.py
-git commit -m "style: update send_webhook_alert overview layout"
+git commit -m "style: update send_webhook_alert Chinese overview layout"
 ```
 
 ---
@@ -110,21 +111,21 @@ git commit -m "style: update send_webhook_alert overview layout"
 - [ ] **Step 1: Refactor Billing dimension text builder in `backend/scheduler.py`**
 
 ```python
-                        bname = billing_account_names.get(b['id'], "Unknown Account")
+                        bname = billing_account_names.get(b['id'], "未知 Billing 账号")
                         if config.alert_type == "relative":
                             ratio_pct = b['change_ratio'] * 100
                             card_item = (
                                 f"## 💳 `{b['id']}` ({bname})\n"
-                                f"> 💰 Cost: <font color=\"warning\">${b['cost']:.2f}</font>\n"
-                                f"> 📈 Increase: <font color=\"warning\">{ratio_pct:+.2f}%</font>\n"
-                                f"> 📜 History Cost: ${b['history_cost']:.2f}\n"
-                                f"> 📅 Date: {b['date']}"
+                                f"> 💰 单日费用：<font color=\"warning\">${b['cost']:.2f}</font>\n"
+                                f"> 📈 费用涨幅：<font color=\"warning\">{ratio_pct:+.2f}%</font>\n"
+                                f"> 📜 历史费用：${b['history_cost']:.2f}\n"
+                                f"> 📅 费用日期：{b['date']}"
                             )
                         else:
                             card_item = (
                                 f"## 💳 `{b['id']}` ({bname})\n"
-                                f"> 💰 Cost: <font color=\"warning\">${b['cost']:.2f}</font>\n"
-                                f"> 📅 Date: {b['date']}"
+                                f"> 💰 单日费用：<font color=\"warning\">${b['cost']:.2f}</font>\n"
+                                f"> 📅 费用日期：{b['date']}"
                             )
                         
                         top_projs_str_list = []
@@ -132,9 +133,9 @@ git commit -m "style: update send_webhook_alert overview layout"
                             top_projs_str_list.append(f"> {idx+1}. `{p['project_id']}` : **${p['cost']:.2f}** ({p['percentage']:.1f}%)")
                         
                         if top_projs_str_list:
-                            card_item += "\n> 🔝 Top Projects:\n" + "\n".join(top_projs_str_list)
+                            card_item += "\n> 🔝 Top 消费项目：\n" + "\n".join(top_projs_str_list)
                         else:
-                            card_item += "\n> 🔝 Top Projects: None"
+                            card_item += "\n> 🔝 Top 消费项目：无"
                             
                         billing_details_list.append(card_item)
                     
@@ -143,13 +144,13 @@ git commit -m "style: update send_webhook_alert overview layout"
                     threshold_display = f"{config.threshold_percentage * 100:.1f}%" if config.alert_type == "relative" else f"${config.threshold:.2f}"
                     desc_text = config.service_description if config.service_description else config.alert_name
                     message_content = (
-                        f"# 🔴 GCP Billing Alert\n\n"
+                        f"# 🔴 GCP 费用超标告警\n\n"
                         f"> {desc_text}\n\n"
-                        f"**Threshold**\n"
+                        f"**告警阈值**\n"
                         f"🟠 {threshold_display}\n\n"
-                        f"**Alert Date**\n"
+                        f"**告警日期**\n"
                         f"{start_dt} ~ {end_dt}\n\n"
-                        f"**Billings Triggered**\n"
+                        f"**超标 Billing 数**\n"
                         f"{len(exceeded_billings)}\n\n"
                         f"{billing_details_all}"
                     )
@@ -168,7 +169,7 @@ Expected: `OK`
 
 ```bash
 git add backend/scheduler.py backend/test_alert.py
-git commit -m "style: reform Billing dimension alert quote-block layout"
+git commit -m "style: reform Billing dimension alert quote-block Chinese layout"
 ```
 
 ---
@@ -186,28 +187,28 @@ git commit -m "style: reform Billing dimension alert quote-block layout"
 - [ ] **Step 1: Refactor Project dimension text builder in `backend/scheduler.py`**
 
 ```python
-                        cust_name = project_customer_map.get(p['id'], "Unknown")
-                        billing_id = project_billing_ids.get(p['id'], "Unknown")
-                        b_display = f"{billing_id} ({billing_name_map.get(billing_id, 'Unknown')})" if billing_id != "Unknown" else "Unknown"
+                        cust_name = project_customer_map.get(p['id'], "未知客户")
+                        billing_id = project_billing_ids.get(p['id'], "未知 Billing")
+                        b_display = f"{billing_id} ({billing_name_map.get(billing_id, '未知')})" if billing_id != "未知 Billing" else "未知 Billing"
                         
                         if config.alert_type == "relative":
                             ratio_pct = p['change_ratio'] * 100
                             card_item = (
                                 f"## 📦 `{p['id']}`\n"
-                                f"> 💰 Cost: <font color=\"warning\">${p['cost']:.2f}</font>\n"
-                                f"> 📈 Increase: <font color=\"warning\">{ratio_pct:+.2f}%</font>\n"
-                                f"> 📜 History Cost: ${p['history_cost']:.2f}\n"
-                                f"> 📅 Date: {p['date']}\n"
-                                f"> 🏢 Billing: `{b_display}`\n"
-                                f"> 👤 Customer: {cust_name}"
+                                f"> 💰 单日费用：<font color=\"warning\">${p['cost']:.2f}</font>\n"
+                                f"> 📈 费用涨幅：<font color=\"warning\">{ratio_pct:+.2f}%</font>\n"
+                                f"> 📜 历史费用：${p['history_cost']:.2f}\n"
+                                f"> 📅 费用日期：{p['date']}\n"
+                                f"> 🏢 所属 Billing：`{b_display}`\n"
+                                f"> 👤 所属客户：{cust_name}"
                             )
                         else:
                             card_item = (
                                 f"## 📦 `{p['id']}`\n"
-                                f"> 💰 Cost: <font color=\"warning\">${p['cost']:.2f}</font>\n"
-                                f"> 📅 Date: {p['date']}\n"
-                                f"> 🏢 Billing: `{b_display}`\n"
-                                f"> 👤 Customer: {cust_name}"
+                                f"> 💰 单日费用：<font color=\"warning\">${p['cost']:.2f}</font>\n"
+                                f"> 📅 费用日期：{p['date']}\n"
+                                f"> 🏢 所属 Billing：`{b_display}`\n"
+                                f"> 👤 所属客户：{cust_name}"
                             )
                         project_cards.append(card_item)
 
@@ -216,13 +217,13 @@ git commit -m "style: reform Billing dimension alert quote-block layout"
                     threshold_display = f"{config.threshold_percentage * 100:.1f}%" if config.alert_type == "relative" else f"${config.threshold:.2f}"
                     desc_text = config.service_description if config.service_description else config.alert_name
                     message_content = (
-                        f"# 🔴 GCP Billing Alert\n\n"
+                        f"# 🔴 GCP 费用超标告警\n\n"
                         f"> {desc_text}\n\n"
-                        f"**Threshold**\n"
+                        f"**告警阈值**\n"
                         f"🟠 {threshold_display}\n\n"
-                        f"**Alert Date**\n"
+                        f"**告警日期**\n"
                         f"{start_dt} ~ {end_dt}\n\n"
-                        f"**Projects Triggered**\n"
+                        f"**超标项目数**\n"
                         f"{len(exceeded_projects)}\n\n"
                         f"{project_details_all}"
                     )
@@ -241,5 +242,5 @@ Expected: `OK` (23 passing)
 
 ```bash
 git add backend/scheduler.py backend/test_alert.py
-git commit -m "style: reform Project dimension alert quote-block layout"
+git commit -m "style: reform Project dimension alert quote-block Chinese layout"
 ```
