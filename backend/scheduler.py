@@ -461,11 +461,10 @@ def check_billing_and_alert():
 
                 if exceeded_projects:
                     logger.warning(f"ALERT: Project Config '{config.alert_name}' triggered for {len(exceeded_projects)} projects.")
-                    service_info = f" (服务: {config.service_description})" if config.service_description else ""
                     threshold_val = config.threshold_percentage if config.alert_type == "relative" else config.threshold
                     
                     project_cards = []
-                    for idx, p in enumerate(exceeded_projects):
+                    for p in exceeded_projects:
                         cust_name = project_customer_map.get(p['id'], "未知客户")
                         billing_id = project_billing_ids.get(p['id'], "未知 Billing")
                         b_display = f"{billing_id} ({billing_name_map.get(billing_id, '未知')})" if billing_id != "未知 Billing" else "未知 Billing"
