@@ -112,29 +112,30 @@ def send_webhook_alert(webhook_url: str, message_content: str, threshold: float,
     if not webhook_url:
         return
         
-    if message_content.startswith("### 🔴"):
+    if message_content.startswith("# 🔴") or message_content.startswith("### 🔴"):
         # 已经是完整美化格式的卡片消息
         content = message_content
     elif message_content.startswith("🔔"):
         # 系统测试通知
         content = (
-            f"### 🔴 GCP 费用超标告警\n"
-            f"---\n"
-            f"**📊 基本信息**\n"
-            f"* **测试日期**：<font color=\"comment\">{date}</font>\n\n"
-            f"**📢 测试内容**：\n"
+            f"# 🔴 GCP 费用超标告警\n\n"
+            f"> 系统连接测试\n\n"
+            f"**测试日期**\n"
+            f"{date}\n\n"
+            f"**测试内容**\n"
             f"{message_content}"
         )
     else:
         # 兼容性回退
         threshold_display = f"{threshold * 100:.1f}%" if is_relative else f"${threshold:.2f}"
         content = (
-            f"### 🔴 GCP 费用超标告警\n"
-            f"---\n"
-            f"**📊 基本信息**\n"
-            f"* **告警日期**：<font color=\"comment\">{date}</font>\n"
-            f"* **设定的告警阈值**：<font color=\"comment\">{threshold_display}</font>\n\n"
-            f"**📋 详细内容**：\n"
+            f"# 🔴 GCP 费用超标告警\n\n"
+            f"> 告警通知\n\n"
+            f"**告警阈值**\n"
+            f"🟠 {threshold_display}\n\n"
+            f"**告警日期**\n"
+            f"{date}\n\n"
+            f"**详细内容**\n"
             f"{message_content}"
         )
         

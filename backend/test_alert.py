@@ -494,12 +494,17 @@ class TestSendWebhookAlert(unittest.TestCase):
         mock_post.return_value = mock_response
 
         webhook_url = "http://mock-webhook"
-        message_content = "### 🔴 GCP 费用超标告警\n---\n**📊 基本信息**"
-        send_webhook_alert(webhook_url, message_content, 100.0, "2026-07-22")
-
-        mock_post.assert_called_once()
-        called_json = mock_post.call_args[1]["json"]
-        self.assertEqual(called_json["markdown"]["content"], message_content)
+        
+        # Test with ### 🔴
+        message_content_3 = "### 🔴 GCP 费用超标告警\n---\n**📊 基本信息**"
+        send_webhook_alert(webhook_url, message_content_3, 100.0, "2026-07-22")
+        self.assertEqual(mock_post.call_args[1]["json"]["markdown"]["content"], message_content_3)
+        
+        # Test with # 🔴
+        mock_post.reset_mock()
+        message_content_1 = "# 🔴 GCP 费用超标告警\n\n> 告警通知"
+        send_webhook_alert(webhook_url, message_content_1, 100.0, "2026-07-22")
+        self.assertEqual(mock_post.call_args[1]["json"]["markdown"]["content"], message_content_1)
 
     @patch('scheduler.requests.post')
     def test_send_webhook_alert_system_test(self, mock_post):
@@ -514,11 +519,11 @@ class TestSendWebhookAlert(unittest.TestCase):
         mock_post.assert_called_once()
         called_json = mock_post.call_args[1]["json"]
         expected_content = (
-            f"### 🔴 GCP 费用超标告警\n"
-            f"---\n"
-            f"**📊 基本信息**\n"
-            f"* **测试日期**：<font color=\"comment\">2026-07-22</font>\n\n"
-            f"**📢 测试内容**：\n"
+            f"# 🔴 GCP 费用超标告警\n\n"
+            f"> 系统连接测试\n\n"
+            f"**测试日期**\n"
+            f"2026-07-22\n\n"
+            f"**测试内容**\n"
             f"🔔 这是一条系统测试通知"
         )
         self.assertEqual(called_json["markdown"]["content"], expected_content)
@@ -536,12 +541,13 @@ class TestSendWebhookAlert(unittest.TestCase):
         mock_post.assert_called_once()
         called_json = mock_post.call_args[1]["json"]
         expected_content = (
-            f"### 🔴 GCP 费用超标告警\n"
-            f"---\n"
-            f"**📊 基本信息**\n"
-            f"* **告警日期**：<font color=\"comment\">2026-07-22</font>\n"
-            f"* **设定的告警阈值**：<font color=\"comment\">$150.50</font>\n\n"
-            f"**📋 详细内容**：\n"
+            f"# 🔴 GCP 费用超标告警\n\n"
+            f"> 告警通知\n\n"
+            f"**告警阈值**\n"
+            f"🟠 $150.50\n\n"
+            f"**告警日期**\n"
+            f"2026-07-22\n\n"
+            f"**详细内容**\n"
             f"Some legacy error alert message"
         )
         self.assertEqual(called_json["markdown"]["content"], expected_content)
@@ -559,12 +565,13 @@ class TestSendWebhookAlert(unittest.TestCase):
         mock_post.assert_called_once()
         called_json = mock_post.call_args[1]["json"]
         expected_content = (
-            f"### 🔴 GCP 费用超标告警\n"
-            f"---\n"
-            f"**📊 基本信息**\n"
-            f"* **告警日期**：<font color=\"comment\">2026-07-22</font>\n"
-            f"* **设定的告警阈值**：<font color=\"comment\">55.0%</font>\n\n"
-            f"**📋 详细内容**：\n"
+            f"# 🔴 GCP 费用超标告警\n\n"
+            f"> 告警通知\n\n"
+            f"**告警阈值**\n"
+            f"🟠 55.0%\n\n"
+            f"**告警日期**\n"
+            f"2026-07-22\n\n"
+            f"**详细内容**\n"
             f"Some legacy relative alert message"
         )
         self.assertEqual(called_json["markdown"]["content"], expected_content)
