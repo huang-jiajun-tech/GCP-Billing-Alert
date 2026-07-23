@@ -168,13 +168,15 @@ class TestAlertSchedulerLogic(unittest.TestCase):
         message_content_arg = call_args[1]
         
         self.assertEqual(webhook_url_arg, "http://mock-webhook")
-        self.assertIn("### 🔴 GCP 费用超标告警\n", message_content_arg)
-        self.assertIn("Relative Week Alert", message_content_arg)
-        self.assertIn("**📦 超标项目 [1/1]**：`proj-1`", message_content_arg)
-        self.assertIn("* **当前费用**：<font color=\"warning\">$160.00</font>", message_content_arg)
-        self.assertIn("* **费用涨幅**：<font color=\"warning\">+60.00%</font>", message_content_arg)
-        self.assertNotIn("\n>", message_content_arg) # Ensure no blockquotes
-        self.assertFalse(message_content_arg.startswith(">"))
+        self.assertIn("# 🔴 GCP 费用超标告警\n\n", message_content_arg)
+        self.assertIn("> Relative Week Alert\n\n", message_content_arg)
+        self.assertIn("## 📦 `proj-1`\n", message_content_arg)
+        self.assertIn("> 💰 单日费用：<font color=\"warning\">$160.00</font>\n", message_content_arg)
+        self.assertIn("> 📈 费用涨幅：<font color=\"warning\">+60.00%</font>\n", message_content_arg)
+        self.assertIn("> 📜 历史费用：$100.00\n", message_content_arg)
+        self.assertIn("> 📅 费用日期：", message_content_arg)
+        self.assertIn("> 🏢 所属 Billing：`未知 Billing`\n", message_content_arg)
+        self.assertIn("> 👤 所属客户：未知客户", message_content_arg)
         
         # Verify incident was created
         mock_crud.create_alert_incident.assert_called_once()
@@ -486,14 +488,13 @@ class TestAlertSchedulerLogic(unittest.TestCase):
         message_content_arg = call_args[1]
         
         self.assertEqual(webhook_url_arg, "http://mock-webhook")
-        self.assertIn("### 🔴 GCP 费用超标告警\n", message_content_arg)
-        self.assertIn("Project Absolute Alert", message_content_arg)
-        self.assertIn("**📦 超标项目 [1/1]**：`proj-absolute`", message_content_arg)
-        self.assertIn("* **所属客户**：`Customer XYZ`", message_content_arg)
-        self.assertIn("* **所属 Billing**：`billing-123 (Test Billing Account)`", message_content_arg)
-        self.assertIn("* **单日费用**：<font color=\"warning\">$75.00</font>", message_content_arg)
-        self.assertNotIn("\n>", message_content_arg) # Ensure no blockquotes
-        self.assertFalse(message_content_arg.startswith(">"))
+        self.assertIn("# 🔴 GCP 费用超标告警\n\n", message_content_arg)
+        self.assertIn("> Project Absolute Alert\n\n", message_content_arg)
+        self.assertIn("## 📦 `proj-absolute`\n", message_content_arg)
+        self.assertIn("> 💰 单日费用：<font color=\"warning\">$75.00</font>\n", message_content_arg)
+        self.assertIn("> 📅 费用日期：", message_content_arg)
+        self.assertIn("> 🏢 所属 Billing：`billing-123 (Test Billing Account)`\n", message_content_arg)
+        self.assertIn("> 👤 所属客户：Customer XYZ", message_content_arg)
         
         # Verify incident was created
         mock_crud.create_alert_incident.assert_called_once()

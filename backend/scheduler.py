@@ -467,41 +467,43 @@ def check_billing_and_alert():
                     project_cards = []
                     for idx, p in enumerate(exceeded_projects):
                         cust_name = project_customer_map.get(p['id'], "未知客户")
-                        billing_id = project_billing_ids.get(p['id'], "未知Billing")
-                        b_display = f"{billing_id} ({billing_name_map.get(billing_id, '未知')})" if billing_id != "未知Billing" else "未知Billing"
+                        billing_id = project_billing_ids.get(p['id'], "未知 Billing")
+                        b_display = f"{billing_id} ({billing_name_map.get(billing_id, '未知')})" if billing_id != "未知 Billing" else "未知 Billing"
                         
                         if config.alert_type == "relative":
                             ratio_pct = p['change_ratio'] * 100
                             card_item = (
-                                f"**📦 超标项目 [{idx+1}/{len(exceeded_projects)}]**：`{p['id']}`\n"
-                                f"* **所属客户**：`{cust_name}`\n"
-                                f"* **所属 Billing**：`{b_display}`\n"
-                                f"* **当前费用**：<font color=\"warning\">${p['cost']:.2f}</font> (日期: {p['date']})\n"
-                                f"* **历史费用**：<font color=\"comment\">${p['history_cost']:.2f}</font> (日期: {p['history_date']})\n"
-                                f"* **费用涨幅**：<font color=\"warning\">{ratio_pct:+.2f}%</font>"
+                                f"## 📦 `{p['id']}`\n"
+                                f"> 💰 单日费用：<font color=\"warning\">${p['cost']:.2f}</font>\n"
+                                f"> 📈 费用涨幅：<font color=\"warning\">{ratio_pct:+.2f}%</font>\n"
+                                f"> 📜 历史费用：${p['history_cost']:.2f}\n"
+                                f"> 📅 费用日期：{p['date']}\n"
+                                f"> 🏢 所属 Billing：`{b_display}`\n"
+                                f"> 👤 所属客户：{cust_name}"
                             )
                         else:
                             card_item = (
-                                f"**📦 超标项目 [{idx+1}/{len(exceeded_projects)}]**：`{p['id']}`\n"
-                                f"* **所属客户**：`{cust_name}`\n"
-                                f"* **所属 Billing**：`{b_display}`\n"
-                                f"* **单日费用**：<font color=\"warning\">${p['cost']:.2f}</font> (日期: {p['date']})"
+                                f"## 📦 `{p['id']}`\n"
+                                f"> 💰 单日费用：<font color=\"warning\">${p['cost']:.2f}</font>\n"
+                                f"> 📅 费用日期：{p['date']}\n"
+                                f"> 🏢 所属 Billing：`{b_display}`\n"
+                                f"> 👤 所属客户：{cust_name}"
                             )
                         project_cards.append(card_item)
 
-                    project_details_all = "\n\n---\n\n".join(project_cards)
+                    project_details_all = "\n\n".join(project_cards)
                     
                     threshold_display = f"{config.threshold_percentage * 100:.1f}%" if config.alert_type == "relative" else f"${config.threshold:.2f}"
+                    desc_text = config.service_description if config.service_description else config.alert_name
                     message_content = (
-                        f"### 🔴 GCP 费用超标告警\n"
-                        f"---\n"
-                        f"**📊 基本信息**\n"
-                        f"* **告警名称**：`{config.alert_name}`{service_info}\n"
-                        f"* **告警日期**：<font color=\"comment\">{start_dt} to {end_dt}</font>\n"
-                        f"* **检查范围**：<font color=\"comment\">过去 {days_to_check} 天</font>\n"
-                        f"* **设定的告警阈值**：<font color=\"comment\">{threshold_display}</font>\n\n"
-                        f"**🚨 异常详情（共 {len(exceeded_projects)} 个项目超标）**\n"
-                        f"---\n"
+                        f"# 🔴 GCP 费用超标告警\n\n"
+                        f"> {desc_text}\n\n"
+                        f"**告警阈值**\n"
+                        f"🟠 {threshold_display}\n\n"
+                        f"**告警日期**\n"
+                        f"{start_dt} ~ {end_dt}\n\n"
+                        f"**超标项目数**\n"
+                        f"{len(exceeded_projects)}\n\n"
                         f"{project_details_all}"
                     )
 
