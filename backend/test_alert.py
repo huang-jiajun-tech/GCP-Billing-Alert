@@ -323,6 +323,11 @@ class TestAlertSchedulerLogic(unittest.TestCase):
         
         # Verify webhook was called
         mock_send_webhook.assert_called_once()
+        args = mock_send_webhook.call_args[0]
+        self.assertEqual(args[0], "http://mock-webhook")
+        self.assertIn("# 🔴 GCP 费用超标告警\n\n", args[1])
+        self.assertIn("## 💳 `billing-1` (Test Account 1)\n", args[1])
+        self.assertIn("> 💰 单日费用：<font color=\"warning\">$150.00</font>\n", args[1])
         # Verify incident was created
         mock_crud.create_alert_incident.assert_called_once()
 
@@ -371,10 +376,14 @@ class TestAlertSchedulerLogic(unittest.TestCase):
         mock_send_webhook.assert_called_once()
         args = mock_send_webhook.call_args[0]
         self.assertEqual(args[0], "http://mock-webhook") # URL
-        self.assertIn("Main Billing", args[1]) # 账单名称
-        self.assertIn("proj-a", args[1]) # Top 1
-        self.assertIn("proj-b", args[1]) # Top 2
-        self.assertIn("proj-c", args[1]) # Top 3
+        self.assertIn("# 🔴 GCP 费用超标告警\n\n", args[1])
+        self.assertIn("> Billing Absolute Alert\n\n", args[1])
+        self.assertIn("## 💳 `billing-1` (Main Billing)\n", args[1])
+        self.assertIn("> 💰 单日费用：<font color=\"warning\">$1200.00</font>\n", args[1])
+        self.assertIn("> 🔝 Top 消费项目：\n", args[1])
+        self.assertIn("> 1. `proj-a` : **$500.00** (41.7%)", args[1])
+        self.assertIn("> 2. `proj-b` : **$400.00** (33.3%)", args[1])
+        self.assertIn("> 3. `proj-c` : **$200.00** (16.7%)", args[1])
         self.assertNotIn("proj-d", args[1]) # 确保 Top 4 被截断未显示
 
     @patch('scheduler.SessionLocal')
@@ -423,11 +432,14 @@ class TestAlertSchedulerLogic(unittest.TestCase):
         mock_send_webhook.assert_called_once()
         args = mock_send_webhook.call_args[0]
         self.assertEqual(args[0], "http://mock-webhook") # URL
-        self.assertIn("Main Billing", args[1]) # 账单名称
-        self.assertIn("proj-a", args[1]) # Top 1
-        self.assertIn("proj-b", args[1]) # Top 2
-        # 验证涨幅数据在格式化内容中 (60.00%)
-        self.assertIn("+60.00%", args[1])
+        self.assertIn("# 🔴 GCP 费用超标告警\n\n", args[1])
+        self.assertIn("> Billing Relative Alert\n\n", args[1])
+        self.assertIn("## 💳 `billing-1` (Main Billing)\n", args[1])
+        self.assertIn("> 💰 单日费用：<font color=\"warning\">$160.00</font>\n", args[1])
+        self.assertIn("> 📈 费用涨幅：<font color=\"warning\">+60.00%</font>\n", args[1])
+        self.assertIn("> 📜 历史费用：$100.00\n", args[1])
+        self.assertIn("> 1. `proj-a` : **$100.00** (62.5%)", args[1])
+        self.assertIn("> 2. `proj-b` : **$60.00** (37.5%)", args[1])
 
     @patch('scheduler.SessionLocal')
     @patch('scheduler.crud')

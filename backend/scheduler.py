@@ -311,43 +311,50 @@ def check_billing_and_alert():
                     service_info = f" (服务: {config.service_description})" if config.service_description else ""
                     threshold_val = config.threshold_percentage if config.alert_type == "relative" else config.threshold
 
+                    billing_account_names = billing_name_map
                     billing_details_list = []
                     for b in exceeded_billings:
-                        bname = billing_name_map.get(b['id'], "未知账号")
+                        bname = billing_account_names.get(b['id'], "未知 Billing 账号")
                         if config.alert_type == "relative":
                             ratio_pct = b['change_ratio'] * 100
-                            detail_header = (
-                                f"**🚨 超标 Billing 账号**：`{b['id']}` ({bname})\n"
-                                f"* **当前总费用**：<font color=\"warning\">${b['cost']:.2f}</font> (日期: {b['date']})\n"
-                                f"* **历史同期费用**：<font color=\"comment\">${b['history_cost']:.2f}</font> (日期: {b['history_date']})\n"
-                                f"* **整体费用涨幅**：<font color=\"warning\">{ratio_pct:+.2f}%</font>"
+                            card_item = (
+                                f"## 💳 `{b['id']}` ({bname})\n"
+                                f"> 💰 单日费用：<font color=\"warning\">${b['cost']:.2f}</font>\n"
+                                f"> 📈 费用涨幅：<font color=\"warning\">{ratio_pct:+.2f}%</font>\n"
+                                f"> 📜 历史费用：${b['history_cost']:.2f}\n"
+                                f"> 📅 费用日期：{b['date']}"
                             )
                         else:
-                            detail_header = (
-                                f"**🚨 超标 Billing 账号**：`{b['id']}` ({bname})\n"
-                                f"* **当前单日费用**：<font color=\"warning\">${b['cost']:.2f}</font> (日期: {b['date']})"
+                            card_item = (
+                                f"## 💳 `{b['id']}` ({bname})\n"
+                                f"> 💰 单日费用：<font color=\"warning\">${b['cost']:.2f}</font>\n"
+                                f"> 📅 费用日期：{b['date']}"
                             )
                         
                         top_projs_str_list = []
                         for idx, p in enumerate(b['top_projects']):
-                            top_projs_str_list.append(f"  {idx+1}. `{p['project_id']}` : **${p['cost']:.2f}** (占比 {p['percentage']:.1f}%)")
-                        top_projs_block = "\n".join(top_projs_str_list) if top_projs_str_list else "  *(暂无项目明细数据)*"
+                            top_projs_str_list.append(f"> {idx+1}. `{p['project_id']}` : **${p['cost']:.2f}** ({p['percentage']:.1f}%)")
                         
-                        billing_details_list.append(f"{detail_header}\n* **该 Billing 下当日消费前 3 的 Top 项目**：\n{top_projs_block}")
+                        if top_projs_str_list:
+                            card_item += "\n> 🔝 Top 消费项目：\n" + "\n".join(top_projs_str_list)
+                        else:
+                            card_item += "\n> 🔝 Top 消费项目：无"
+                            
+                        billing_details_list.append(card_item)
                     
-                    billing_details_all = "\n\n---\n\n".join(billing_details_list)
+                    billing_details_all = "\n\n".join(billing_details_list)
                     
                     threshold_display = f"{config.threshold_percentage * 100:.1f}%" if config.alert_type == "relative" else f"${config.threshold:.2f}"
+                    desc_text = config.service_description if config.service_description else config.alert_name
                     message_content = (
-                        f"### 🔴 GCP 费用超标告警\n"
-                        f"---\n"
-                        f"**📊 基本信息**\n"
-                        f"* **告警名称**：`{config.alert_name}`{service_info}\n"
-                        f"* **告警日期**：<font color=\"comment\">{start_dt} to {end_dt}</font>\n"
-                        f"* **检查范围**：<font color=\"comment\">过去 {days_to_check} 天</font>\n"
-                        f"* **设定的告警阈值**：<font color=\"comment\">{threshold_display}</font>\n\n"
-                        f"**🚨 异常详情（共 {len(exceeded_billings)} 个账单账号超标）**\n"
-                        f"---\n"
+                        f"# 🔴 GCP 费用超标告警\n\n"
+                        f"> {desc_text}\n\n"
+                        f"**告警阈值**\n"
+                        f"🟠 {threshold_display}\n\n"
+                        f"**告警日期**\n"
+                        f"{start_dt} ~ {end_dt}\n\n"
+                        f"**超标 Billing 数**\n"
+                        f"{len(exceeded_billings)}\n\n"
                         f"{billing_details_all}"
                     )
                     
