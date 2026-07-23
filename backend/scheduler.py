@@ -310,9 +310,10 @@ def check_billing_and_alert():
                     logger.warning(f"ALERT: Billing Config '{config.alert_name}' triggered for {len(exceeded_billings)} accounts.")
                     service_info = f" (服务: {config.service_description})" if config.service_description else ""
                     threshold_val = config.threshold_percentage if config.alert_type == "relative" else config.threshold
+                    threshold_display = f"{config.threshold_percentage * 100:.1f}%" if config.alert_type == "relative" else f"${config.threshold:.2f}"
+                    desc_text = config.service_description if config.service_description else config.alert_name
 
                     billing_account_names = billing_name_map
-                    billing_details_list = []
                     for b in exceeded_billings:
                         bname = billing_account_names.get(b['id'], "未知 Billing 账号")
                         if config.alert_type == "relative":
@@ -339,29 +340,21 @@ def check_billing_and_alert():
                             card_item += "\n> 🔝 Top 消费项目：\n" + "\n".join(top_projs_str_list)
                         else:
                             card_item += "\n> 🔝 Top 消费项目：无"
-                            
-                        billing_details_list.append(card_item)
-                    
-                    billing_details_all = "\n\n".join(billing_details_list)
-                    
-                    threshold_display = f"{config.threshold_percentage * 100:.1f}%" if config.alert_type == "relative" else f"${config.threshold:.2f}"
-                    desc_text = config.service_description if config.service_description else config.alert_name
-                    message_content = (
-                        f"# 🔴 GCP 费用超标告警\n\n"
-                        f"> {desc_text}\n\n"
-                        f"**告警阈值**\n"
-                        f"🟠 {threshold_display}\n\n"
-                        f"**告警日期**\n"
-                        f"{start_dt} ~ {end_dt}\n\n"
-                        f"**超标 Billing 数**\n"
-                        f"{len(exceeded_billings)}\n\n"
-                        f"{billing_details_all}"
-                    )
-                    
-                    if config.webhook_url:
-                        send_webhook_alert(config.webhook_url, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
-                    if config.email:
-                        send_email_alert(config.email, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
+                        
+                        message_content = (
+                            f"# 🔴 GCP 费用超标告警\n\n"
+                            f"> {desc_text}\n\n"
+                            f"**告警阈值**\n"
+                            f"🟠 {threshold_display}\n\n"
+                            f"**告警日期**\n"
+                            f"{start_dt} ~ {end_dt}\n\n"
+                            f"{card_item}"
+                        )
+                        
+                        if config.webhook_url:
+                            send_webhook_alert(config.webhook_url, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
+                        if config.email:
+                            send_email_alert(config.email, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
 
             else:
                 # ==========================================

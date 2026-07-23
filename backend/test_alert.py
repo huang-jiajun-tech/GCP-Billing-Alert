@@ -446,6 +446,60 @@ class TestAlertSchedulerLogic(unittest.TestCase):
     @patch('scheduler.SessionLocal')
     @patch('scheduler.crud')
     @patch('scheduler.send_webhook_alert')
+    def test_absolute_alert_with_multiple_billing_dimensions(self, mock_send_webhook, mock_crud, mock_session_local):
+        # 设定 Mock
+        mock_db = MagicMock()
+        mock_session_local.return_value = mock_db
+        
+        # 配置 Billing 维度的绝对额告警
+        config = models.AlertConfig(
+            id=2,
+            alert_name="Billing Absolute Alert",
+            dimension="billing",
+            billing_account_ids=["billing-1", "billing-2"],
+            threshold=100.0,
+            alert_type="absolute",
+            time_range_days=1,
+            is_active=True,
+            webhook_url="http://mock-webhook"
+        )
+        mock_crud.get_alert_configs.return_value = [config]
+        mock_crud.get_billing_accounts.return_value = [
+            models.BillingAccount(billing_account_id="billing-1", display_name="Main Billing 1"),
+            models.BillingAccount(billing_account_id="billing-2", display_name="Main Billing 2")
+        ]
+        mock_crud.get_all_project_infos.return_value = []
+        
+        usage_date = (datetime.utcnow() - timedelta(days=1)).date()
+        usages = [
+            models.DailyUsage(project_id="proj-a", billing_account_id="billing-1", cost=150.0, usage_date=usage_date, currency="USD"),
+            models.DailyUsage(project_id="proj-b", billing_account_id="billing-2", cost=200.0, usage_date=usage_date, currency="USD")
+        ]
+        mock_crud.get_daily_usage.return_value = usages
+        mock_db.query().filter().first.return_value = None
+        
+        # 运行检测
+        check_billing_and_alert()
+        
+        # 检查是否成功触发 Webhook 报警，且因为有两个超标 billing，所以分别发送了独立的消息卡片
+        self.assertEqual(mock_send_webhook.call_count, 2)
+        
+        # 检查两次调用的参数
+        calls = mock_send_webhook.call_args_list
+        urls = [call[0][0] for call in calls]
+        contents = [call[0][1] for call in calls]
+        
+        self.assertEqual(urls, ["http://mock-webhook", "http://mock-webhook"])
+        
+        # 必须一个包含 billing-1，一个包含 billing-2
+        has_billing_1 = any("## 💳 `billing-1` (Main Billing 1)" in content for content in contents)
+        has_billing_2 = any("## 💳 `billing-2` (Main Billing 2)" in content for content in contents)
+        self.assertTrue(has_billing_1)
+        self.assertTrue(has_billing_2)
+
+    @patch('scheduler.SessionLocal')
+    @patch('scheduler.crud')
+    @patch('scheduler.send_webhook_alert')
     def test_absolute_project_alert_trigger(self, mock_send_webhook, mock_crud, mock_session_local):
         mock_db = MagicMock()
         mock_session_local.return_value = mock_db
