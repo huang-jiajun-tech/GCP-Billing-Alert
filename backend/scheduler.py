@@ -455,8 +455,9 @@ def check_billing_and_alert():
                 if exceeded_projects:
                     logger.warning(f"ALERT: Project Config '{config.alert_name}' triggered for {len(exceeded_projects)} projects.")
                     threshold_val = config.threshold_percentage if config.alert_type == "relative" else config.threshold
+                    threshold_display = f"{config.threshold_percentage * 100:.1f}%" if config.alert_type == "relative" else f"${config.threshold:.2f}"
+                    desc_text = config.service_description if config.service_description else config.alert_name
                     
-                    project_cards = []
                     for p in exceeded_projects:
                         cust_name = project_customer_map.get(p['id'], "未知客户")
                         billing_id = project_billing_ids.get(p['id'], "未知 Billing")
@@ -481,28 +482,21 @@ def check_billing_and_alert():
                                 f"> 🏢 所属 Billing：`{b_display}`\n"
                                 f"> 👤 所属客户：{cust_name}"
                             )
-                        project_cards.append(card_item)
+                        
+                        message_content = (
+                            f"# 🔴 GCP 费用超标告警\n\n"
+                            f"> {desc_text}\n\n"
+                            f"**告警阈值**\n"
+                            f"🟠 {threshold_display}\n\n"
+                            f"**告警日期**\n"
+                            f"{start_dt} ~ {end_dt}\n\n"
+                            f"{card_item}"
+                        )
 
-                    project_details_all = "\n\n".join(project_cards)
-                    
-                    threshold_display = f"{config.threshold_percentage * 100:.1f}%" if config.alert_type == "relative" else f"${config.threshold:.2f}"
-                    desc_text = config.service_description if config.service_description else config.alert_name
-                    message_content = (
-                        f"# 🔴 GCP 费用超标告警\n\n"
-                        f"> {desc_text}\n\n"
-                        f"**告警阈值**\n"
-                        f"🟠 {threshold_display}\n\n"
-                        f"**告警日期**\n"
-                        f"{start_dt} ~ {end_dt}\n\n"
-                        f"**超标项目数**\n"
-                        f"{len(exceeded_projects)}\n\n"
-                        f"{project_details_all}"
-                    )
-
-                    if config.webhook_url:
-                        send_webhook_alert(config.webhook_url, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
-                    if config.email:
-                        send_email_alert(config.email, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
+                        if config.webhook_url:
+                            send_webhook_alert(config.webhook_url, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
+                        if config.email:
+                            send_email_alert(config.email, message_content, threshold_val, f"{start_dt} to {end_dt}", is_relative=(config.alert_type == "relative"))
 
     finally:
         db.close()

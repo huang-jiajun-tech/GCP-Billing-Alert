@@ -553,6 +553,64 @@ class TestAlertSchedulerLogic(unittest.TestCase):
         # Verify incident was created
         mock_crud.create_alert_incident.assert_called_once()
 
+    @patch('scheduler.SessionLocal')
+    @patch('scheduler.crud')
+    @patch('scheduler.send_webhook_alert')
+    def test_absolute_project_alert_trigger_multiple_projects(self, mock_send_webhook, mock_crud, mock_session_local):
+        mock_db = MagicMock()
+        mock_session_local.return_value = mock_db
+        
+        # Mock billing accounts display names
+        billing_acc = MagicMock(billing_account_id="billing-123", display_name="Test Billing Account")
+        mock_crud.get_billing_accounts.return_value = [billing_acc]
+        
+        # Mock project info for customer names
+        proj_info_1 = MagicMock(project_id="proj-absolute-1", customer_name="Customer XYZ")
+        proj_info_2 = MagicMock(project_id="proj-absolute-2", customer_name="Customer ABC")
+        mock_crud.get_all_project_infos.return_value = [proj_info_1, proj_info_2]
+
+        config = models.AlertConfig(
+            id=3,
+            alert_name="Project Absolute Alert",
+            alert_type="absolute",
+            threshold=50.0,
+            time_range_days=1,
+            is_active=True,
+            dimension="project",
+            webhook_url="http://mock-webhook"
+        )
+        mock_crud.get_alert_configs.return_value = [config]
+        
+        yesterday = (datetime.utcnow() - timedelta(days=1)).date()
+        
+        # Two projects exceed absolute threshold of $50.0
+        usage_current_1 = MagicMock(project_id="proj-absolute-1", billing_account_id="billing-123", cost=75.0, usage_date=yesterday)
+        usage_current_2 = MagicMock(project_id="proj-absolute-2", billing_account_id="billing-123", cost=120.0, usage_date=yesterday)
+        
+        mock_crud.get_daily_usage.return_value = [usage_current_1, usage_current_2]
+        mock_crud.get_recent_handled_incidents.return_value = []
+        mock_db.query().filter().first.return_value = None
+        
+        check_billing_and_alert()
+        
+        # Verify webhook was called TWICE (one for each project)
+        self.assertEqual(mock_send_webhook.call_count, 2)
+        
+        calls = mock_send_webhook.call_args_list
+        urls = [call[0][0] for call in calls]
+        contents = [call[0][1] for call in calls]
+        
+        self.assertEqual(urls, ["http://mock-webhook", "http://mock-webhook"])
+        
+        # Check that one content contains proj-absolute-1 and the other proj-absolute-2
+        has_proj_1 = any("## 📦 `proj-absolute-1`" in content for content in contents)
+        has_proj_2 = any("## 📦 `proj-absolute-2`" in content for content in contents)
+        self.assertTrue(has_proj_1)
+        self.assertTrue(has_proj_2)
+        
+        # Verify incident was created for both
+        self.assertEqual(mock_crud.create_alert_incident.call_count, 2)
+
 class TestSendWebhookAlert(unittest.TestCase):
     @patch('scheduler.requests.post')
     def test_send_webhook_alert_beautified(self, mock_post):
